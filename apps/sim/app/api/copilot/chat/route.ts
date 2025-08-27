@@ -39,7 +39,7 @@ const ChatMessageSchema = z.object({
   chatId: z.string().optional(),
   workflowId: z.string().min(1, 'Workflow ID is required'),
   mode: z.enum(['ask', 'agent']).optional().default('agent'),
-  depth: z.number().int().min(-2).max(3).optional().default(0),
+  depth: z.number().int().min(0).max(3).optional().default(0),
   prefetch: z.boolean().optional(),
   createNewChat: z.boolean().optional().default(false),
   stream: z.boolean().optional().default(true),
@@ -56,6 +56,7 @@ const ChatMessageSchema = z.object({
         workflowId: z.string().optional(),
         knowledgeId: z.string().optional(),
         blockId: z.string().optional(),
+        templateId: z.string().optional(),
       })
     )
     .optional(),

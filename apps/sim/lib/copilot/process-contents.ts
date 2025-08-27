@@ -4,7 +4,7 @@ import { db } from '@/db'
 import { copilotChats } from '@/db/schema'
 import { and, eq } from 'drizzle-orm'
 import { loadWorkflowFromNormalizedTables } from '@/lib/workflows/db-helpers'
-import { knowledgeBase, document } from '@/db/schema'
+import { knowledgeBase, document, templates } from '@/db/schema'
 import { isNull } from 'drizzle-orm'
 
 export type AgentContextType = 'past_chat' | 'workflow' | 'blocks' | 'logs' | 'knowledge' | 'templates'
@@ -32,6 +32,9 @@ export async function processContexts(contexts: ChatContext[] | undefined): Prom
       }
       if (ctx.kind === 'blocks' && (ctx as any).blockId) {
         return await processBlockMetadata((ctx as any).blockId, ctx.label ? `@${ctx.label}` : '@')
+      }
+      if (ctx.kind === 'templates' && (ctx as any).templateId) {
+        return await processTemplateFromDb((ctx as any).templateId, ctx.label ? `@${ctx.label}` : '@')
       }
       // Other kinds can be added here: workflow, blocks, logs, knowledge, templates
       return null
@@ -64,6 +67,9 @@ export async function processContextsServer(
       }
       if (ctx.kind === 'blocks' && (ctx as any).blockId) {
         return await processBlockMetadata((ctx as any).blockId, ctx.label ? `@${ctx.label}` : '@')
+      }
+      if (ctx.kind === 'templates' && (ctx as any).templateId) {
+        return await processTemplateFromDb((ctx as any).templateId, ctx.label ? `@${ctx.label}` : '@')
       }
       return null
     } catch (error) {
@@ -279,6 +285,40 @@ async function processBlockMetadata(blockId: string, tag: string): Promise<Agent
     return { type: 'blocks', tag, content }
   } catch (error) {
     logger.error('Error processing block metadata', { blockId, error })
+    return null
+  }
+}
+
+async function processTemplateFromDb(templateId: string, tag: string): Promise<AgentContext | null> {
+  try {
+    const rows = await db
+      .select({
+        id: templates.id,
+        name: templates.name,
+        description: templates.description,
+        category: templates.category,
+        author: templates.author,
+        stars: templates.stars,
+        state: templates.state,
+      })
+      .from(templates)
+      .where(eq(templates.id, templateId))
+      .limit(1)
+    const t = rows?.[0]
+    if (!t) return null
+    const summary = {
+      id: t.id,
+      name: t.name,
+      description: t.description || '',
+      category: t.category,
+      author: t.author,
+      stars: t.stars || 0,
+      workflow: t.state, // exact workflow json
+    }
+    const content = JSON.stringify(summary)
+    return { type: 'templates', tag, content }
+  } catch (error) {
+    logger.error('Error processing template context (db)', { templateId, error })
     return null
   }
 } 

@@ -113,7 +113,7 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
     const mentionMenuRef = useRef<HTMLDivElement>(null)
     const submenuRef = useRef<HTMLDivElement>(null)
     const [mentionActiveIndex, setMentionActiveIndex] = useState(0)
-    const mentionOptions = ['Past Chat', 'Workflow', 'Blocks', 'Logs', 'Knowledge', 'Templates']
+    const mentionOptions = ['Past Chat', 'Workflow', 'Blocks', 'Knowledge', 'Templates']
     const [openSubmenuFor, setOpenSubmenuFor] = useState<string | null>(null)
     const [submenuActiveIndex, setSubmenuActiveIndex] = useState(0)
     const [pastChats, setPastChats] = useState<Array<{ id: string; title: string | null; workflowId: string | null; updatedAt?: string }>>([])
@@ -129,6 +129,9 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
     const [blocksList, setBlocksList] = useState<Array<{ id: string; name: string; icon?: React.ReactNode }>>([])
     const [isLoadingBlocks, setIsLoadingBlocks] = useState(false)
     const [blocksQuery, setBlocksQuery] = useState('')
+    const [templatesList, setTemplatesList] = useState<Array<{ id: string; name: string; stars: number }>>([])
+    const [isLoadingTemplates, setIsLoadingTemplates] = useState(false)
+    const [templatesQuery, setTemplatesQuery] = useState('')
 
     const { data: session } = useSession()
     const { currentChat, workflowId } = useCopilotStore()
@@ -265,6 +268,24 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
       } catch {}
       finally {
         setIsLoadingBlocks(false)
+      }
+    }
+
+    const ensureTemplatesLoaded = async () => {
+      if (isLoadingTemplates || templatesList.length > 0) return
+      try {
+        setIsLoadingTemplates(true)
+        const resp = await fetch('/api/templates?limit=50&offset=0')
+        if (!resp.ok) throw new Error(`Failed to load templates: ${resp.status}`)
+        const data = await resp.json()
+        const items = Array.isArray(data?.data) ? data.data : []
+        const mapped = items
+          .map((t: any) => ({ id: t.id, name: t.name || 'Untitled Template', stars: t.stars || 0 }))
+          .sort((a: any, b: any) => b.stars - a.stars)
+        setTemplatesList(mapped)
+      } catch {}
+      finally {
+        setIsLoadingTemplates(false)
       }
     }
 
@@ -505,6 +526,16 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
             if (e.key === 'ArrowDown') return prev >= last ? 0 : prev + 1
             return prev <= 0 ? last : prev - 1
           })
+        } else if (openSubmenuFor === 'Templates' && templatesList.length > 0) {
+          const filtered = templatesList.filter((t) =>
+            (t.name || 'Untitled Template').toLowerCase().includes(templatesQuery.toLowerCase())
+          )
+          setSubmenuActiveIndex((prev) => {
+            const last = Math.max(0, filtered.length - 1)
+            if (filtered.length === 0) return 0
+            if (e.key === 'ArrowDown') return prev >= last ? 0 : prev + 1
+            return prev <= 0 ? last : prev - 1
+          })
         } else {
           setMentionActiveIndex((prev) => {
             const last = mentionOptions.length - 1
@@ -533,6 +564,10 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
           setOpenSubmenuFor('Blocks')
           setSubmenuActiveIndex(0)
           void ensureBlocksLoaded()
+        } else if (selected === 'Templates') {
+          setOpenSubmenuFor('Templates')
+          setSubmenuActiveIndex(0)
+          void ensureTemplatesLoaded()
         }
         return
       }
@@ -653,6 +688,18 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
               const chosen = filtered[Math.max(0, Math.min(submenuActiveIndex, filtered.length - 1))]
               insertBlockMention(chosen)
             }
+          } else if (!openSubmenuFor && selected === 'Templates') {
+            setOpenSubmenuFor('Templates')
+            setSubmenuActiveIndex(0)
+            void ensureTemplatesLoaded()
+          } else if (openSubmenuFor === 'Templates') {
+            const filtered = templatesList.filter((t) =>
+              (t.name || 'Untitled Template').toLowerCase().includes(templatesQuery.toLowerCase())
+            )
+            if (filtered.length > 0) {
+              const chosen = filtered[Math.max(0, Math.min(submenuActiveIndex, filtered.length - 1))]
+              insertTemplateMention(chosen)
+            }
           }
         }
       }
@@ -758,6 +805,18 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
       setSelectedContexts((prev) => {
         if (prev.some((c) => c.kind === 'blocks' && (c as any).blockId === blk.id)) return prev
         return [...prev, { kind: 'blocks', blockId: blk.id, label } as any]
+      })
+      setShowMentionMenu(false)
+      setOpenSubmenuFor(null)
+    }
+
+    const insertTemplateMention = (tpl: { id: string; name: string }) => {
+      const label = tpl.name || 'Untitled Template'
+      const token = `@${label}`
+      insertAtCursor(`${token} `)
+      setSelectedContexts((prev) => {
+        if (prev.some((c) => c.kind === 'templates' && (c as any).templateId === tpl.id)) return prev
+        return [...prev, { kind: 'templates', templateId: tpl.id, label } as any]
       })
       setShowMentionMenu(false)
       setOpenSubmenuFor(null)
@@ -1108,6 +1167,10 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
                           setOpenSubmenuFor('Blocks')
                           setSubmenuActiveIndex(0)
                           void ensureBlocksLoaded()
+                        } else if (label === 'Templates') {
+                          setOpenSubmenuFor('Templates')
+                          setSubmenuActiveIndex(0)
+                          void ensureTemplatesLoaded()
                         }
                       }}
                     >
@@ -1316,6 +1379,60 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
                                 {blk.icon}
                               </div>
                               <span className='truncate'>{blk.name || blk.id}</span>
+                            </div>
+                          ))
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {openSubmenuFor === 'Templates' && (
+                  <div
+                    ref={submenuRef}
+                    className='absolute bottom-full z-50 mb-1 left-[calc(14rem+4px)] w-96 rounded-[8px] border bg-popover p-1 text-foreground shadow-md max-h-64 overflow-auto'
+                  >
+                    <div className='px-2 py-1.5 text-muted-foreground text-xs'>Templates</div>
+                    <div className='px-2 pb-1'>
+                      <Input
+                        value={templatesQuery}
+                        onChange={(e) => {
+                          setTemplatesQuery(e.target.value)
+                          setSubmenuActiveIndex(0)
+                        }}
+                        placeholder='Search templates...'
+                        className='h-7 rounded-[6px] border bg-background px-2 text-xs focus-visible:ring-0 focus-visible:ring-offset-0'
+                      />
+                    </div>
+                    <div className='h-px w-full bg-border my-1' />
+                    <div className='max-h-64 overflow-auto'>
+                      {isLoadingTemplates ? (
+                        <div className='px-2 py-2 text-muted-foreground text-sm'>Loading...</div>
+                      ) : templatesList.length === 0 ? (
+                        <div className='px-2 py-2 text-muted-foreground text-sm'>No templates found</div>
+                      ) : (
+                        templatesList
+                          .filter((t) =>
+                            (t.name || 'Untitled Template')
+                              .toLowerCase()
+                              .includes(templatesQuery.toLowerCase())
+                          )
+                          .map((tpl, idx) => (
+                            <div
+                              key={tpl.id}
+                              className={cn(
+                                'flex items-center gap-2 rounded-[6px] px-2 py-1.5 text-sm hover:bg-muted/60',
+                                submenuActiveIndex === idx && 'bg-muted'
+                              )}
+                              role='menuitem'
+                              aria-selected={submenuActiveIndex === idx}
+                              onMouseEnter={() => setSubmenuActiveIndex(idx)}
+                              onClick={() => insertTemplateMention(tpl)}
+                            >
+                              <div className='flex h-4 w-4 items-center justify-center'>★</div>
+                              <span className='truncate'>{tpl.name}</span>
+                              <span className='ml-auto text-muted-foreground text-xs'>
+                                {tpl.stars}
+                              </span>
                             </div>
                           ))
                       )}
