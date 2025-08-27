@@ -126,6 +126,9 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
     const [knowledgeBases, setKnowledgeBases] = useState<Array<{ id: string; name: string }>>([])
     const [isLoadingKnowledge, setIsLoadingKnowledge] = useState(false)
     const [knowledgeQuery, setKnowledgeQuery] = useState('')
+    const [blocksList, setBlocksList] = useState<Array<{ id: string; name: string; icon?: React.ReactNode }>>([])
+    const [isLoadingBlocks, setIsLoadingBlocks] = useState(false)
+    const [blocksQuery, setBlocksQuery] = useState('')
 
     const { data: session } = useSession()
     const { currentChat, workflowId } = useCopilotStore()
@@ -241,6 +244,27 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
       } catch {}
       finally {
         setIsLoadingKnowledge(false)
+      }
+    }
+
+    const ensureBlocksLoaded = async () => {
+      if (isLoadingBlocks || blocksList.length > 0) return
+      try {
+        setIsLoadingBlocks(true)
+        const { getAllBlocks } = await import('@/blocks')
+        const all = getAllBlocks()
+        const mapped = all
+          .filter((b: any) => b.type !== 'starter' && !b.hideFromToolbar)
+          .map((b: any) => ({
+            id: b.type,
+            name: b.name || b.type,
+            icon: typeof b.icon === 'function' ? b.icon({ className: 'h-4 w-4' }) : b.icon,
+          }))
+          .sort((a: any, b: any) => a.name.localeCompare(b.name))
+        setBlocksList(mapped)
+      } catch {}
+      finally {
+        setIsLoadingBlocks(false)
       }
     }
 
@@ -471,6 +495,16 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
             if (e.key === 'ArrowDown') return prev >= last ? 0 : prev + 1
             return prev <= 0 ? last : prev - 1
           })
+        } else if (openSubmenuFor === 'Blocks' && blocksList.length > 0) {
+          const filtered = blocksList.filter((b) =>
+            (b.name || b.id).toLowerCase().includes(blocksQuery.toLowerCase())
+          )
+          setSubmenuActiveIndex((prev) => {
+            const last = Math.max(0, filtered.length - 1)
+            if (filtered.length === 0) return 0
+            if (e.key === 'ArrowDown') return prev >= last ? 0 : prev + 1
+            return prev <= 0 ? last : prev - 1
+          })
         } else {
           setMentionActiveIndex((prev) => {
             const last = mentionOptions.length - 1
@@ -495,6 +529,10 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
           setOpenSubmenuFor('Knowledge')
           setSubmenuActiveIndex(0)
           void ensureKnowledgeLoaded()
+        } else if (selected === 'Blocks') {
+          setOpenSubmenuFor('Blocks')
+          setSubmenuActiveIndex(0)
+          void ensureBlocksLoaded()
         }
         return
       }
@@ -603,6 +641,18 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
               const chosen = filtered[Math.max(0, Math.min(submenuActiveIndex, filtered.length - 1))]
               insertKnowledgeMention(chosen)
             }
+          } else if (!openSubmenuFor && selected === 'Blocks') {
+            setOpenSubmenuFor('Blocks')
+            setSubmenuActiveIndex(0)
+            void ensureBlocksLoaded()
+          } else if (openSubmenuFor === 'Blocks') {
+            const filtered = blocksList.filter((b) =>
+              (b.name || b.id).toLowerCase().includes(blocksQuery.toLowerCase())
+            )
+            if (filtered.length > 0) {
+              const chosen = filtered[Math.max(0, Math.min(submenuActiveIndex, filtered.length - 1))]
+              insertBlockMention(chosen)
+            }
           }
         }
       }
@@ -696,6 +746,18 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
       setSelectedContexts((prev) => {
         if (prev.some((c) => c.kind === 'knowledge' && (c as any).knowledgeId === kb.id)) return prev
         return [...prev, { kind: 'knowledge', knowledgeId: kb.id, label } as any]
+      })
+      setShowMentionMenu(false)
+      setOpenSubmenuFor(null)
+    }
+
+    const insertBlockMention = (blk: { id: string; name: string }) => {
+      const label = blk.name || blk.id
+      const token = `@${label}`
+      insertAtCursor(`${token} `)
+      setSelectedContexts((prev) => {
+        if (prev.some((c) => c.kind === 'blocks' && (c as any).blockId === blk.id)) return prev
+        return [...prev, { kind: 'blocks', blockId: blk.id, label } as any]
       })
       setShowMentionMenu(false)
       setOpenSubmenuFor(null)
@@ -1042,6 +1104,10 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
                           setOpenSubmenuFor('Knowledge')
                           setSubmenuActiveIndex(0)
                           void ensureKnowledgeLoaded()
+                        } else if (label === 'Blocks') {
+                          setOpenSubmenuFor('Blocks')
+                          setSubmenuActiveIndex(0)
+                          void ensureBlocksLoaded()
                         }
                       }}
                     >
@@ -1201,6 +1267,55 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
                             >
                               <div className='h-3.5 w-3.5' />
                               <span className='truncate'>{kb.name || 'Untitled'}</span>
+                            </div>
+                          ))
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {openSubmenuFor === 'Blocks' && (
+                  <div
+                    ref={submenuRef}
+                    className='absolute bottom-full z-50 mb-1 left-[calc(14rem+4px)] w-80 rounded-[8px] border bg-popover p-1 text-foreground shadow-md max-h-64 overflow-auto'
+                  >
+                    <div className='px-2 py-1.5 text-muted-foreground text-xs'>Blocks</div>
+                    <div className='px-2 pb-1'>
+                      <Input
+                        value={blocksQuery}
+                        onChange={(e) => {
+                          setBlocksQuery(e.target.value)
+                          setSubmenuActiveIndex(0)
+                        }}
+                        placeholder='Search blocks...'
+                        className='h-7 rounded-[6px] border bg-background px-2 text-xs focus-visible:ring-0 focus-visible:ring-offset-0'
+                      />
+                    </div>
+                    <div className='h-px w-full bg-border my-1' />
+                    <div className='max-h-64 overflow-auto'>
+                      {isLoadingBlocks ? (
+                        <div className='px-2 py-2 text-muted-foreground text-sm'>Loading...</div>
+                      ) : blocksList.length === 0 ? (
+                        <div className='px-2 py-2 text-muted-foreground text-sm'>No blocks found</div>
+                      ) : (
+                        blocksList
+                          .filter((b) => (b.name || b.id).toLowerCase().includes(blocksQuery.toLowerCase()))
+                          .map((blk, idx) => (
+                            <div
+                              key={blk.id}
+                              className={cn(
+                                'flex items-center gap-2 rounded-[6px] px-2 py-1.5 text-sm hover:bg-muted/60',
+                                submenuActiveIndex === idx && 'bg-muted'
+                              )}
+                              role='menuitem'
+                              aria-selected={submenuActiveIndex === idx}
+                              onMouseEnter={() => setSubmenuActiveIndex(idx)}
+                              onClick={() => insertBlockMention(blk)}
+                            >
+                              <div className='flex h-4 w-4 items-center justify-center'>
+                                {blk.icon}
+                              </div>
+                              <span className='truncate'>{blk.name || blk.id}</span>
                             </div>
                           ))
                       )}

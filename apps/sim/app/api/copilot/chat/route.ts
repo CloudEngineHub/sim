@@ -55,6 +55,7 @@ const ChatMessageSchema = z.object({
         chatId: z.string().optional(),
         workflowId: z.string().optional(),
         knowledgeId: z.string().optional(),
+        blockId: z.string().optional(),
       })
     )
     .optional(),

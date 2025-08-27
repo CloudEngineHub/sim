@@ -30,6 +30,9 @@ export async function processContexts(contexts: ChatContext[] | undefined): Prom
       if (ctx.kind === 'knowledge' && (ctx as any).knowledgeId) {
         return await processKnowledgeFromDb((ctx as any).knowledgeId, ctx.label ? `@${ctx.label}` : '@')
       }
+      if (ctx.kind === 'blocks' && (ctx as any).blockId) {
+        return await processBlockMetadata((ctx as any).blockId, ctx.label ? `@${ctx.label}` : '@')
+      }
       // Other kinds can be added here: workflow, blocks, logs, knowledge, templates
       return null
     } catch (error) {
@@ -58,6 +61,9 @@ export async function processContextsServer(
       }
       if (ctx.kind === 'knowledge' && (ctx as any).knowledgeId) {
         return await processKnowledgeFromDb((ctx as any).knowledgeId, ctx.label ? `@${ctx.label}` : '@')
+      }
+      if (ctx.kind === 'blocks' && (ctx as any).blockId) {
+        return await processBlockMetadata((ctx as any).blockId, ctx.label ? `@${ctx.label}` : '@')
       }
       return null
     } catch (error) {
@@ -213,6 +219,66 @@ async function processKnowledgeFromDb(knowledgeBaseId: string, tag: string): Pro
     return { type: 'knowledge', tag, content }
   } catch (error) {
     logger.error('Error processing knowledge context (db)', { knowledgeBaseId, error })
+    return null
+  }
+}
+
+async function processBlockMetadata(blockId: string, tag: string): Promise<AgentContext | null> {
+  try {
+    // Reuse registry to match get_blocks_metadata tool result
+    const { registry: blockRegistry } = await import('@/blocks/registry')
+    const { tools: toolsRegistry } = await import('@/tools/registry')
+    const SPECIAL_BLOCKS_METADATA: Record<string, any> = {}
+
+    let metadata: any = {}
+    if ((SPECIAL_BLOCKS_METADATA as any)[blockId]) {
+      metadata = { ...(SPECIAL_BLOCKS_METADATA as any)[blockId] }
+      metadata.tools = metadata.tools?.access || []
+    } else {
+      const blockConfig: any = (blockRegistry as any)[blockId]
+      if (!blockConfig) {
+        return null
+      }
+      metadata = {
+        id: blockId,
+        name: blockConfig.name || blockId,
+        description: blockConfig.description || '',
+        longDescription: blockConfig.longDescription,
+        category: blockConfig.category,
+        bgColor: blockConfig.bgColor,
+        inputs: blockConfig.inputs || {},
+        outputs: blockConfig.outputs || {},
+        tools: blockConfig.tools?.access || [],
+        hideFromToolbar: blockConfig.hideFromToolbar,
+      }
+      if (blockConfig.subBlocks && Array.isArray(blockConfig.subBlocks)) {
+        metadata.subBlocks = (blockConfig.subBlocks as any[]).map((sb: any) => ({
+          id: sb.id,
+          name: sb.name,
+          type: sb.type,
+          description: sb.description,
+          default: sb.default,
+          options: Array.isArray(sb.options) ? sb.options : [],
+        }))
+      } else {
+        metadata.subBlocks = []
+      }
+    }
+
+    if (Array.isArray(metadata.tools) && metadata.tools.length > 0) {
+      metadata.toolDetails = {}
+      for (const toolId of metadata.tools) {
+        const tool = (toolsRegistry as any)[toolId]
+        if (tool) {
+          metadata.toolDetails[toolId] = { name: tool.name, description: tool.description }
+        }
+      }
+    }
+
+    const content = JSON.stringify({ metadata })
+    return { type: 'blocks', tag, content }
+  } catch (error) {
+    logger.error('Error processing block metadata', { blockId, error })
     return null
   }
 } 
