@@ -1,12 +1,14 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useParams } from 'next/navigation'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import {
   type SlackChannelInfo,
   SlackChannelSelector,
 } from '@/app/workspace/[workspaceId]/w/[workflowId]/components/workflow-block/components/sub-block/components/channel-selector/components/slack-channel-selector'
 import { useDependsOnGate } from '@/app/workspace/[workspaceId]/w/[workflowId]/components/workflow-block/components/sub-block/hooks/use-depends-on-gate'
+import { useForeignCredential } from '@/app/workspace/[workspaceId]/w/[workflowId]/components/workflow-block/components/sub-block/hooks/use-foreign-credential'
 import { useSubBlockValue } from '@/app/workspace/[workspaceId]/w/[workflowId]/components/workflow-block/components/sub-block/hooks/use-sub-block-value'
 import type { SubBlockConfig } from '@/blocks/types'
 
@@ -44,6 +46,10 @@ export function ChannelSelectorInput({
   // Central dependsOn gating
   const { finalDisabled } = useDependsOnGate(blockId, subBlock, { disabled, isPreview })
 
+  // Get workflowId from the route params for server auth scoping
+  const params = useParams()
+  const workflowIdParam = (params?.workflowId as string) || undefined
+
   // Get the credential for the provider - use provided credential or fall back to reactive values
   let credential: string
   if (providedCredential) {
@@ -54,8 +60,22 @@ export function ChannelSelectorInput({
     credential = (connectedCredential as string) || ''
   }
 
-  // Use preview value when in preview mode, otherwise use store value
-  const value = isPreview ? previewValue : storeValue
+  // Check if the selected OAuth credential belongs to current user (avoid foreign creds)
+  const { isForeignCredential } = useForeignCredential('slack', connectedCredential as string)
+
+  // Determine if a valid credential is present to enable the selector
+  const hasValidCredential = (() => {
+    const method = (authMethod as string) || ''
+    const trimmed = (credential || '').trim()
+    if (method === 'bot_token') {
+      return trimmed.startsWith('xoxb-')
+    }
+    // OAuth path: require a non-empty credential id AND it must belong to current user
+    return trimmed.length > 0 && !isForeignCredential
+  })()
+
+  // Only pass through a credential if it's valid; otherwise force empty string
+  const effectiveCredential = hasValidCredential ? credential : ''
 
   // Get the current value from the store or prop value if in preview mode (same pattern as file-selector)
   useEffect(() => {
@@ -87,12 +107,18 @@ export function ChannelSelectorInput({
                 onChange={(channelId: string, channelInfo?: SlackChannelInfo) => {
                   handleChannelChange(channelId, channelInfo)
                 }}
-                credential={credential}
+                credential={effectiveCredential}
+                workflowId={workflowIdParam}
                 label={subBlock.placeholder || 'Select Slack channel'}
-                disabled={finalDisabled}
+                disabled={finalDisabled || !hasValidCredential}
               />
             </div>
           </TooltipTrigger>
+          {!hasValidCredential && (
+            <TooltipContent side='top'>
+              <p>Please select Slack credentials first</p>
+            </TooltipContent>
+          )}
         </Tooltip>
       </TooltipProvider>
     )

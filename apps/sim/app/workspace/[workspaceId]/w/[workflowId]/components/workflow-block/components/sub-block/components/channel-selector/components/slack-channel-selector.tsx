@@ -22,6 +22,7 @@ interface SlackChannelSelectorProps {
   value: string
   onChange: (channelId: string, channelInfo?: SlackChannelInfo) => void
   credential: string
+  workflowId?: string
   label?: string
   disabled?: boolean
 }
@@ -30,6 +31,7 @@ export function SlackChannelSelector({
   value,
   onChange,
   credential,
+  workflowId,
   label = 'Select Slack channel',
   disabled = false,
 }: SlackChannelSelectorProps) {
@@ -51,7 +53,7 @@ export function SlackChannelSelector({
       const res = await fetch('/api/tools/slack/channels', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ credential }),
+        body: JSON.stringify({ credential, workflowId }),
       })
 
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`)
@@ -62,7 +64,6 @@ export function SlackChannelSelector({
         setChannels([])
       } else {
         setChannels(data.channels)
-        setInitialFetchDone(true)
       }
     } catch (err) {
       if ((err as Error).name === 'AbortError') return
@@ -70,8 +71,10 @@ export function SlackChannelSelector({
       setChannels([])
     } finally {
       setLoading(false)
+      // Mark that we attempted an initial fetch to avoid repeated automatic retries on failure
+      setInitialFetchDone(true)
     }
-  }, [credential])
+  }, [credential, workflowId])
 
   // Handle dropdown open/close - fetch channels when opening
   const handleOpenChange = (isOpen: boolean) => {
