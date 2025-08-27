@@ -28,6 +28,8 @@ export const ToolIds = z.enum([
   // New variable tools
   'get_global_workflow_variables',
   'set_global_workflow_variables',
+  // New
+  'oauth_request_access',
 ])
 export type ToolId = z.infer<typeof ToolIds>
 
@@ -66,6 +68,8 @@ export const ToolArgSchemas = {
       })
     ),
   }),
+  // New
+  oauth_request_access: z.object({}),
 
   build_workflow: z.object({
     yamlContent: z.string(),
@@ -223,11 +227,13 @@ export const ToolSSESchemas = {
   ),
   gdrive_request_access: toolCallSSEFor(
     'gdrive_request_access',
-    ToolArgSchemas.gdrive_request_access
+    ToolArgSchemas.gdrive_request_access as any
   ),
   list_gdrive_files: toolCallSSEFor('list_gdrive_files', ToolArgSchemas.list_gdrive_files),
   read_gdrive_file: toolCallSSEFor('read_gdrive_file', ToolArgSchemas.read_gdrive_file),
   reason: toolCallSSEFor('reason', ToolArgSchemas.reason),
+  // New
+  oauth_request_access: toolCallSSEFor('oauth_request_access', ToolArgSchemas.oauth_request_access),
 } as const
 export type ToolSSESchemaMap = typeof ToolSSESchemas
 
@@ -274,6 +280,8 @@ export const ToolResultSchemas = {
   set_global_workflow_variables: z
     .object({ variables: z.record(z.any()) })
     .or(z.object({ message: z.any().optional(), data: z.any().optional() })),
+  // New
+  oauth_request_access: z.object({ granted: z.boolean().optional(), message: z.string().optional() }),
 
   build_workflow: BuildOrEditWorkflowResult,
   edit_workflow: BuildOrEditWorkflowResult,

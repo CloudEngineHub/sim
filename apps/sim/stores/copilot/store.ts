@@ -47,6 +47,7 @@ import type {
 import { useWorkflowDiffStore } from '@/stores/workflow-diff/store'
 import { useSubBlockStore } from '@/stores/workflows/subblock/store'
 import { useWorkflowStore } from '@/stores/workflows/workflow/store'
+import { OAuthRequestAccessClientTool } from '@/lib/copilot/tools/client/other/oauth-request-access'
 
 const logger = createLogger('CopilotStore')
 
@@ -76,6 +77,7 @@ const CLIENT_TOOL_INSTANTIATORS: Record<string, (id: string) => any> = {
   checkoff_todo: (id) => new CheckoffTodoClientTool(id),
   mark_todo_in_progress: (id) => new MarkTodoInProgressClientTool(id),
   gdrive_request_access: (id) => new GDriveRequestAccessClientTool(id),
+  oauth_request_access: (id) => new OAuthRequestAccessClientTool(id),
   edit_workflow: (id) => new EditWorkflowClientTool(id),
   build_workflow: (id) => new BuildWorkflowClientTool(id),
   get_user_workflow: (id) => new GetUserWorkflowClientTool(id),
@@ -110,6 +112,7 @@ export const CLASS_TOOL_METADATA: Record<string, BaseClientToolMetadata | undefi
   get_workflow_from_name: (GetWorkflowFromNameClientTool as any)?.metadata,
   get_global_workflow_variables: (GetGlobalWorkflowVariablesClientTool as any)?.metadata,
   set_global_workflow_variables: (SetGlobalWorkflowVariablesClientTool as any)?.metadata,
+  oauth_request_access: (OAuthRequestAccessClientTool as any)?.metadata,
 }
 
 function ensureClientToolInstance(toolName: string | undefined, toolCallId: string | undefined) {

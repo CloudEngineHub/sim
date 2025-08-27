@@ -78,13 +78,123 @@ export function ToolCallExecution({ toolCall, isCompact = false }: ToolCallProps
               (toolCall.name === 'make_api_request' ||
                 toolCall.name === 'set_environment_variables' ||
                 toolCall.name === 'set_global_workflow_variables') && (
-                <div className='min-w-0 max-w-full rounded bg-amber-100 p-2 dark:bg-amber-900'>
-                  <div className='mb-1 font-medium text-amber-800 text-xs dark:text-amber-200'>
-                    Parameters:
-                  </div>
-                  <div className='min-w-0 max-w-full break-all font-mono text-amber-700 text-xs dark:text-amber-300'>
-                    {JSON.stringify(toolCall.parameters, null, 2)}
-                  </div>
+                <div className='min-w-0 max-w-full rounded border border-amber-200 bg-amber-50 p-2 dark:border-amber-800 dark:bg-amber-950'>
+                  {toolCall.name === 'make_api_request' ? (
+                    <div className='w-full overflow-hidden rounded border border-muted bg-card'>
+                      <div className='grid grid-cols-2 gap-0 border-b border-muted/60 bg-muted/40 px-2 py-1.5'>
+                        <div className='text-[10px] font-medium uppercase tracking-wide text-muted-foreground'>
+                          Method
+                        </div>
+                        <div className='text-[10px] font-medium uppercase tracking-wide text-muted-foreground'>
+                          Endpoint
+                        </div>
+                      </div>
+                      <div className='grid grid-cols-[auto_1fr] items-center gap-2 px-2 py-2'>
+                        <div>
+                          <span className='inline-flex rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground'>
+                            {String((toolCall.parameters as any).method || '').toUpperCase() || 'GET'}
+                          </span>
+                        </div>
+                        <div className='min-w-0'>
+                          <span className='block whitespace-nowrap overflow-x-auto font-mono text-xs text-foreground' title={String((toolCall.parameters as any).url || '')}>
+                            {String((toolCall.parameters as any).url || '') || 'URL not provided'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {toolCall.name === 'set_environment_variables' ? (
+                    (() => {
+                      const variables =
+                        (toolCall.parameters as any).variables && typeof (toolCall.parameters as any).variables === 'object'
+                          ? (toolCall.parameters as any).variables
+                          : {}
+                      const entries = Object.entries(variables)
+                      return (
+                        <div className='w-full overflow-hidden rounded border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950'>
+                          <div className='grid grid-cols-2 gap-0 border-b border-amber-200/60 px-2 py-1.5 dark:border-amber-800/60'>
+                            <div className='text-[10px] font-medium uppercase tracking-wide text-amber-700 dark:text-amber-300'>
+                              Name
+                            </div>
+                            <div className='text-[10px] font-medium uppercase tracking-wide text-amber-700 dark:text-amber-300'>
+                              Value
+                            </div>
+                          </div>
+                          {entries.length === 0 ? (
+                            <div className='px-2 py-2 text-muted-foreground text-xs'>No variables provided</div>
+                          ) : (
+                            <div className='divide-y divide-amber-200 dark:divide-amber-800'>
+                              {entries.map(([k, v]) => (
+                                <div key={k} className='grid grid-cols-[auto_1fr] items-center gap-2 px-2 py-1.5'>
+                                  <div className='truncate font-medium text-xs text-amber-800 dark:text-amber-200'>
+                                    {k}
+                                  </div>
+                                  <div className='min-w-0'>
+                                    <span className='block whitespace-nowrap overflow-x-auto font-mono text-xs text-amber-700 dark:text-amber-300'>
+                                      {String(v)}
+                                    </span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })()
+                  ) : null}
+
+                  {toolCall.name === 'set_global_workflow_variables' ? (
+                    (() => {
+                      const ops = Array.isArray((toolCall.parameters as any).operations)
+                        ? ((toolCall.parameters as any).operations as any[])
+                        : []
+                      return (
+                        <div className='w-full overflow-hidden rounded border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950'>
+                          <div className='grid grid-cols-3 gap-0 border-b border-amber-200/60 px-2 py-1.5 dark:border-amber-800/60'>
+                            <div className='text-[10px] font-medium uppercase tracking-wide text-amber-700 dark:text-amber-300'>
+                              Name
+                            </div>
+                            <div className='text-[10px] font-medium uppercase tracking-wide text-amber-700 dark:text-amber-300'>
+                              Type
+                            </div>
+                            <div className='text-[10px] font-medium uppercase tracking-wide text-amber-700 dark:text-amber-300'>
+                              Value
+                            </div>
+                          </div>
+                          {ops.length === 0 ? (
+                            <div className='px-2 py-2 text-muted-foreground text-xs'>No operations provided</div>
+                          ) : (
+                            <div className='divide-y divide-amber-200 dark:divide-amber-800'>
+                              {ops.map((op, idx) => (
+                                <div key={idx} className='grid grid-cols-3 items-center gap-0 px-2 py-1.5'>
+                                  <div className='min-w-0'>
+                                    <span className='truncate text-xs text-amber-800 dark:text-amber-200'>
+                                      {String(op.name || '')}
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <span className='rounded border px-1 py-0.5 text-[10px] text-muted-foreground'>
+                                      {String(op.type || '')}
+                                    </span>
+                                  </div>
+                                  <div className='min-w-0'>
+                                    {op.value !== undefined ? (
+                                      <span className='block whitespace-nowrap overflow-x-auto font-mono text-xs text-amber-700 dark:text-amber-300'>
+                                        {String(op.value)}
+                                      </span>
+                                    ) : (
+                                      <span className='text-muted-foreground text-xs'>—</span>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })()
+                  ) : null}
                 </div>
               )}
           </div>
