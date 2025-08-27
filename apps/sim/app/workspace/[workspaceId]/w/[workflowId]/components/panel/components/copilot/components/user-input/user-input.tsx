@@ -613,14 +613,39 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
         }
       }
 
+      // Arrow navigation: jump over mention tokens, never land inside
+      if (!showMentionMenu && selectionLength === 0 && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+        const textarea = textareaRef.current
+        if (textarea) {
+          if (e.key === 'ArrowLeft') {
+            const nextPos = Math.max(0, selStart - 1)
+            const r = findRangeContaining(nextPos)
+            if (r) {
+              e.preventDefault()
+              const target = r.start
+              requestAnimationFrame(() => textarea.setSelectionRange(target, target))
+              return
+            }
+          } else if (e.key === 'ArrowRight') {
+            const nextPos = Math.min(message.length, selStart + 1)
+            const r = findRangeContaining(nextPos)
+            if (r) {
+              e.preventDefault()
+              const target = r.end
+              requestAnimationFrame(() => textarea.setSelectionRange(target, target))
+              return
+            }
+          }
+        }
+      }
+
       // Prevent typing inside token
       if (!showMentionMenu && (e.key.length === 1 || e.key === 'Space')) {
         const pos = selStart
         const ranges = computeMentionRanges()
-        // If any selection overlaps a token, block
+        // Only block when caret is strictly inside a token with no selection
         const blocked =
-          (selectionLength > 0 && ranges.some((r) => !(selEnd <= r.start || selStart >= r.end))) ||
-          (!!findRangeContaining(pos) && !!findRangeContaining(pos)?.label)
+          selectionLength === 0 && !!findRangeContaining(pos) && !!findRangeContaining(pos)?.label
         if (blocked) {
           e.preventDefault()
           // Move caret to end of the token
@@ -712,7 +737,10 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
       } else {
         setInternalMessage(newValue)
       }
-      if (newValue.endsWith('@')) {
+      // Open the mention menu if caret is right after an '@' anywhere in the text
+      const caret = e.target.selectionStart ?? newValue.length
+      const charBeforeCaret = caret > 0 ? newValue.charAt(caret - 1) : ''
+      if (charBeforeCaret === '@') {
         setMentionActiveIndex(0)
         setShowMentionMenu(true)
         setOpenSubmenuFor(null)
@@ -914,7 +942,8 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
 
     const findRangeContaining = (pos: number) => {
       const ranges = computeMentionRanges()
-      return ranges.find((r) => pos >= r.start && pos <= r.end)
+      // Consider strictly inside the token; allow typing at boundaries
+      return ranges.find((r) => pos > r.start && pos < r.end)
     }
 
     const deleteRange = (range: { start: number; end: number; label: string }) => {
@@ -937,6 +966,18 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
         }
       })
     }
+
+    // Keep selected contexts in sync with the text so replacing selections works gracefully
+    useEffect(() => {
+      if (!message) {
+        if (selectedContexts.length > 0) setSelectedContexts([])
+        return
+      }
+      const presentLabels = new Set<string>()
+      const ranges = computeMentionRanges()
+      for (const r of ranges) presentLabels.add(r.label)
+      setSelectedContexts((prev) => prev.filter((c) => !!c.label && presentLabels.has(c.label!)))
+    }, [message])
 
     const canSubmit = message.trim().length > 0 && !disabled && !isLoading
     const showAbortButton = isLoading && onAbort
@@ -1109,7 +1150,7 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
                     if (before) elements.push(before)
                     const mentionText = match[0]
                     elements.push(
-                      <span key={`${mentionText}-${i}-${lastIndex}`} className='rounded-[6px] bg-muted'>
+                      <span key={`${mentionText}-${i}-${lastIndex}`} className='rounded-[6px] bg-[color-mix(in_srgb,var(--brand-primary-hover-hex)_14%,transparent)]'>
                         {mentionText}
                       </span>
                     )
