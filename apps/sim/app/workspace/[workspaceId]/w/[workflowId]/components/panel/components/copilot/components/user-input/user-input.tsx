@@ -123,6 +123,9 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
     const [workflows, setWorkflows] = useState<Array<{ id: string; name: string }>>([])
     const [isLoadingWorkflows, setIsLoadingWorkflows] = useState(false)
     const [workflowsQuery, setWorkflowsQuery] = useState('')
+    const [knowledgeBases, setKnowledgeBases] = useState<Array<{ id: string; name: string }>>([])
+    const [isLoadingKnowledge, setIsLoadingKnowledge] = useState(false)
+    const [knowledgeQuery, setKnowledgeQuery] = useState('')
 
     const { data: session } = useSession()
     const { currentChat, workflowId } = useCopilotStore()
@@ -205,10 +208,39 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
         if (!resp.ok) throw new Error(`Failed to load workflows: ${resp.status}`)
         const data = await resp.json()
         const items = Array.isArray(data?.data) ? data.data : []
-        setWorkflows(items.map((w: any) => ({ id: w.id, name: w.name || 'Untitled Workflow' })))
+        // Sort by last modified/updated (newest first), matching sidebar behavior
+        const sorted = [...items].sort((a: any, b: any) => {
+          const ta = new Date(a.lastModified || a.updatedAt || a.createdAt || 0).getTime()
+          const tb = new Date(b.lastModified || b.updatedAt || b.createdAt || 0).getTime()
+          return tb - ta
+        })
+        setWorkflows(
+          sorted.map((w: any) => ({ id: w.id, name: w.name || 'Untitled Workflow' }))
+        )
       } catch {}
       finally {
         setIsLoadingWorkflows(false)
+      }
+    }
+
+    const ensureKnowledgeLoaded = async () => {
+      if (isLoadingKnowledge || knowledgeBases.length > 0) return
+      try {
+        setIsLoadingKnowledge(true)
+        const resp = await fetch('/api/knowledge')
+        if (!resp.ok) throw new Error(`Failed to load knowledge bases: ${resp.status}`)
+        const data = await resp.json()
+        const items = Array.isArray(data?.data) ? data.data : []
+        // Sort by updatedAt desc
+        const sorted = [...items].sort((a: any, b: any) => {
+          const ta = new Date(a.updatedAt || a.createdAt || 0).getTime()
+          const tb = new Date(b.updatedAt || b.createdAt || 0).getTime()
+          return tb - ta
+        })
+        setKnowledgeBases(sorted.map((k: any) => ({ id: k.id, name: k.name || 'Untitled' })))
+      } catch {}
+      finally {
+        setIsLoadingKnowledge(false)
       }
     }
 
@@ -420,8 +452,22 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
             return prev <= 0 ? last : prev - 1
           })
         } else if (openSubmenuFor === 'Workflow' && workflows.length > 0) {
+          const filtered = workflows.filter((w) =>
+            (w.name || 'Untitled Workflow').toLowerCase().includes(workflowsQuery.toLowerCase())
+          )
           setSubmenuActiveIndex((prev) => {
-            const last = workflows.length - 1
+            const last = Math.max(0, filtered.length - 1)
+            if (filtered.length === 0) return 0
+            if (e.key === 'ArrowDown') return prev >= last ? 0 : prev + 1
+            return prev <= 0 ? last : prev - 1
+          })
+        } else if (openSubmenuFor === 'Knowledge' && knowledgeBases.length > 0) {
+          const filtered = knowledgeBases.filter((k) =>
+            (k.name || 'Untitled').toLowerCase().includes(knowledgeQuery.toLowerCase())
+          )
+          setSubmenuActiveIndex((prev) => {
+            const last = Math.max(0, filtered.length - 1)
+            if (filtered.length === 0) return 0
             if (e.key === 'ArrowDown') return prev >= last ? 0 : prev + 1
             return prev <= 0 ? last : prev - 1
           })
@@ -445,6 +491,10 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
           setOpenSubmenuFor('Workflow')
           setSubmenuActiveIndex(0)
           void ensureWorkflowsLoaded()
+        } else if (selected === 'Knowledge') {
+          setOpenSubmenuFor('Knowledge')
+          setSubmenuActiveIndex(0)
+          void ensureKnowledgeLoaded()
         }
         return
       }
@@ -541,6 +591,18 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
               const chosen = filtered[Math.max(0, Math.min(submenuActiveIndex, filtered.length - 1))]
               insertWorkflowMention(chosen)
             }
+          } else if (!openSubmenuFor && selected === 'Knowledge') {
+            setOpenSubmenuFor('Knowledge')
+            setSubmenuActiveIndex(0)
+            void ensureKnowledgeLoaded()
+          } else if (openSubmenuFor === 'Knowledge') {
+            const filtered = knowledgeBases.filter((k) =>
+              (k.name || 'Untitled').toLowerCase().includes(knowledgeQuery.toLowerCase())
+            )
+            if (filtered.length > 0) {
+              const chosen = filtered[Math.max(0, Math.min(submenuActiveIndex, filtered.length - 1))]
+              insertKnowledgeMention(chosen)
+            }
           }
         }
       }
@@ -622,6 +684,18 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
       setSelectedContexts((prev) => {
         if (prev.some((c) => c.kind === 'workflow' && (c as any).workflowId === wf.id)) return prev
         return [...prev, { kind: 'workflow', workflowId: wf.id, label } as ChatContext]
+      })
+      setShowMentionMenu(false)
+      setOpenSubmenuFor(null)
+    }
+
+    const insertKnowledgeMention = (kb: { id: string; name: string }) => {
+      const label = kb.name || 'Untitled'
+      const token = `@${label}`
+      insertAtCursor(`${token} `)
+      setSelectedContexts((prev) => {
+        if (prev.some((c) => c.kind === 'knowledge' && (c as any).knowledgeId === kb.id)) return prev
+        return [...prev, { kind: 'knowledge', knowledgeId: kb.id, label } as any]
       })
       setShowMentionMenu(false)
       setOpenSubmenuFor(null)
@@ -964,6 +1038,10 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
                           setOpenSubmenuFor('Workflow')
                           setSubmenuActiveIndex(0)
                           void ensureWorkflowsLoaded()
+                        } else if (label === 'Knowledge') {
+                          setOpenSubmenuFor('Knowledge')
+                          setSubmenuActiveIndex(0)
+                          void ensureKnowledgeLoaded()
                         }
                       }}
                     >
@@ -1072,6 +1150,57 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
                             >
                               <div className='h-3.5 w-3.5' />
                               <span className='truncate'>{wf.name || 'Untitled Workflow'}</span>
+                            </div>
+                          ))
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {openSubmenuFor === 'Knowledge' && (
+                  <div
+                    ref={submenuRef}
+                    className='absolute bottom-full z-50 mb-1 left-[calc(14rem+4px)] w-72 rounded-[8px] border bg-popover p-1 text-foreground shadow-md max-h-64 overflow-auto'
+                  >
+                    <div className='px-2 py-1.5 text-muted-foreground text-xs'>Knowledge Bases</div>
+                    <div className='px-2 pb-1'>
+                      <Input
+                        value={knowledgeQuery}
+                        onChange={(e) => {
+                          setKnowledgeQuery(e.target.value)
+                          setSubmenuActiveIndex(0)
+                        }}
+                        placeholder='Search knowledge...'
+                        className='h-7 rounded-[6px] border bg-background px-2 text-xs focus-visible:ring-0 focus-visible:ring-offset-0'
+                      />
+                    </div>
+                    <div className='h-px w-full bg-border my-1' />
+                    <div className='max-h-64 overflow-auto'>
+                      {isLoadingKnowledge ? (
+                        <div className='px-2 py-2 text-muted-foreground text-sm'>Loading...</div>
+                      ) : knowledgeBases.length === 0 ? (
+                        <div className='px-2 py-2 text-muted-foreground text-sm'>No knowledge bases</div>
+                      ) : (
+                        knowledgeBases
+                          .filter((k) =>
+                            (k.name || 'Untitled')
+                              .toLowerCase()
+                              .includes(knowledgeQuery.toLowerCase())
+                          )
+                          .map((kb, idx) => (
+                            <div
+                              key={kb.id}
+                              className={cn(
+                                'flex items-center gap-2 rounded-[6px] px-2 py-1.5 text-sm hover:bg-muted/60',
+                                submenuActiveIndex === idx && 'bg-muted'
+                              )}
+                              role='menuitem'
+                              aria-selected={submenuActiveIndex === idx}
+                              onMouseEnter={() => setSubmenuActiveIndex(idx)}
+                              onClick={() => insertKnowledgeMention(kb)}
+                            >
+                              <div className='h-3.5 w-3.5' />
+                              <span className='truncate'>{kb.name || 'Untitled'}</span>
                             </div>
                           ))
                       )}

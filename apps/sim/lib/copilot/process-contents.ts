@@ -4,6 +4,8 @@ import { db } from '@/db'
 import { copilotChats } from '@/db/schema'
 import { and, eq } from 'drizzle-orm'
 import { loadWorkflowFromNormalizedTables } from '@/lib/workflows/db-helpers'
+import { knowledgeBase, document } from '@/db/schema'
+import { isNull } from 'drizzle-orm'
 
 export type AgentContextType = 'past_chat' | 'workflow' | 'blocks' | 'logs' | 'knowledge' | 'templates'
 
@@ -24,6 +26,9 @@ export async function processContexts(contexts: ChatContext[] | undefined): Prom
       }
       if (ctx.kind === 'workflow' && ctx.workflowId) {
         return await processWorkflowFromDb(ctx.workflowId, ctx.label ? `@${ctx.label}` : '@')
+      }
+      if (ctx.kind === 'knowledge' && (ctx as any).knowledgeId) {
+        return await processKnowledgeFromDb((ctx as any).knowledgeId, ctx.label ? `@${ctx.label}` : '@')
       }
       // Other kinds can be added here: workflow, blocks, logs, knowledge, templates
       return null
@@ -50,6 +55,9 @@ export async function processContextsServer(
       }
       if (ctx.kind === 'workflow' && ctx.workflowId) {
         return await processWorkflowFromDb(ctx.workflowId, ctx.label ? `@${ctx.label}` : '@')
+      }
+      if (ctx.kind === 'knowledge' && (ctx as any).knowledgeId) {
+        return await processKnowledgeFromDb((ctx as any).knowledgeId, ctx.label ? `@${ctx.label}` : '@')
       }
       return null
     } catch (error) {
@@ -173,4 +181,38 @@ async function processPastChat(chatId: string, tagOverride?: string): Promise<Ag
 // Back-compat alias; used by processContexts above
 async function processPastChatViaApi(chatId: string, tag?: string) {
   return processPastChat(chatId, tag)
+}
+
+async function processKnowledgeFromDb(knowledgeBaseId: string, tag: string): Promise<AgentContext | null> {
+  try {
+    // Load KB metadata
+    const kbRows = await db
+      .select({ id: knowledgeBase.id, name: knowledgeBase.name, updatedAt: knowledgeBase.updatedAt })
+      .from(knowledgeBase)
+      .where(and(eq(knowledgeBase.id, knowledgeBaseId), isNull(knowledgeBase.deletedAt)))
+      .limit(1)
+    const kb = kbRows?.[0]
+    if (!kb) return null
+
+    // Load up to 20 recent doc filenames
+    const docRows = await db
+      .select({ filename: document.filename })
+      .from(document)
+      .where(and(eq(document.knowledgeBaseId, knowledgeBaseId), isNull(document.deletedAt)))
+      .limit(20)
+
+    const sampleDocuments = docRows.map((d: any) => d.filename).filter(Boolean)
+    // We don't have total via this quick select; fallback to sample count
+    const summary = {
+      id: kb.id,
+      name: kb.name,
+      docCount: sampleDocuments.length,
+      sampleDocuments,
+    }
+    const content = JSON.stringify(summary)
+    return { type: 'knowledge', tag, content }
+  } catch (error) {
+    logger.error('Error processing knowledge context (db)', { knowledgeBaseId, error })
+    return null
+  }
 } 
