@@ -47,6 +47,16 @@ const ChatMessageSchema = z.object({
   fileAttachments: z.array(FileAttachmentSchema).optional(),
   provider: z.string().optional().default('openai'),
   conversationId: z.string().optional(),
+  contexts: z
+    .array(
+      z.object({
+        kind: z.enum(['past_chat', 'workflow', 'blocks', 'logs', 'knowledge', 'templates']),
+        label: z.string(),
+        chatId: z.string().optional(),
+        workflowId: z.string().optional(),
+      })
+    )
+    .optional(),
 })
 
 /**
@@ -81,7 +91,19 @@ export async function POST(req: NextRequest) {
       fileAttachments,
       provider,
       conversationId,
+      contexts,
     } = ChatMessageSchema.parse(body)
+    // Preprocess contexts server-side
+    let agentContexts: Array<{ type: string; content: string }> = []
+    if (Array.isArray(contexts) && contexts.length > 0) {
+      try {
+        const { processContextsServer } = await import('@/lib/copilot/process-contents')
+        const processed = await processContextsServer(contexts as any, authenticatedUserId)
+        agentContexts = processed
+      } catch (e) {
+        logger.error(`[${tracker.requestId}] Failed to process contexts`, e)
+      }
+    }
 
     // Consolidation mapping: map negative depths to base depth with prefetch=true
     let effectiveDepth: number | undefined = typeof depth === 'number' ? depth : undefined
@@ -312,6 +334,7 @@ export async function POST(req: NextRequest) {
       ...(typeof effectiveDepth === 'number' ? { depth: effectiveDepth } : {}),
       ...(typeof effectivePrefetch === 'boolean' ? { prefetch: effectivePrefetch } : {}),
       ...(session?.user?.name && { userName: session.user.name }),
+      ...(agentContexts.length > 0 && { contexts: agentContexts }),
     }
 
     const simAgentResponse = await fetch(`${SIM_AGENT_API_URL}/api/chat-completion-streaming`, {
