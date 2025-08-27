@@ -22,6 +22,9 @@ export const ToolIds = z.enum([
   'list_gdrive_files',
   'read_gdrive_file',
   'reason',
+  // New tools
+  'list_user_workflows',
+  'get_workflow_from_name',
 ])
 export type ToolId = z.infer<typeof ToolIds>
 
@@ -45,6 +48,9 @@ const NumberOptional = z.number().optional()
 // Tool argument schemas (per SSE examples provided)
 export const ToolArgSchemas = {
   get_user_workflow: z.object({}),
+  // New tools
+  list_user_workflows: z.object({}),
+  get_workflow_from_name: z.object({ workflow_name: z.string() }),
 
   build_workflow: z.object({
     yamlContent: z.string(),
@@ -152,6 +158,12 @@ function toolCallSSEFor<TName extends ToolId, TArgs extends z.ZodTypeAny>(
 
 export const ToolSSESchemas = {
   get_user_workflow: toolCallSSEFor('get_user_workflow', ToolArgSchemas.get_user_workflow),
+  // New tools
+  list_user_workflows: toolCallSSEFor('list_user_workflows', ToolArgSchemas.list_user_workflows),
+  get_workflow_from_name: toolCallSSEFor(
+    'get_workflow_from_name',
+    ToolArgSchemas.get_workflow_from_name
+  ),
   build_workflow: toolCallSSEFor('build_workflow', ToolArgSchemas.build_workflow),
   edit_workflow: toolCallSSEFor('edit_workflow', ToolArgSchemas.edit_workflow),
   run_workflow: toolCallSSEFor('run_workflow', ToolArgSchemas.run_workflow),
@@ -225,6 +237,13 @@ const ExecutionEntry = z.object({
 
 export const ToolResultSchemas = {
   get_user_workflow: z.object({ yamlContent: z.string() }).or(z.string()),
+  // New tools
+  list_user_workflows: z.object({ workflow_names: z.array(z.string()) }),
+  get_workflow_from_name: z
+    .object({ yamlContent: z.string() })
+    .or(z.object({ userWorkflow: z.string() }))
+    .or(z.string()),
+
   build_workflow: BuildOrEditWorkflowResult,
   edit_workflow: BuildOrEditWorkflowResult,
   run_workflow: z.object({
