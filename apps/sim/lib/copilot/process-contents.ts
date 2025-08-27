@@ -15,21 +15,21 @@ const logger = createLogger('ProcessContents')
 
 export async function processContexts(contexts: ChatContext[] | undefined): Promise<AgentContext[]> {
   if (!Array.isArray(contexts) || contexts.length === 0) return []
-  const results: AgentContext[] = []
-
-  for (const ctx of contexts) {
+  const tasks = contexts.map(async (ctx) => {
     try {
       if (ctx.kind === 'past_chat') {
-        const processed = await processPastChatViaApi(ctx.chatId)
-        if (processed) results.push(processed)
+        return await processPastChatViaApi(ctx.chatId)
       }
       // Other kinds can be added here: workflow, blocks, logs, knowledge, templates
+      return null
     } catch (error) {
       logger.error('Failed processing context', { ctx, error })
+      return null
     }
-  }
+  })
 
-  return results
+  const results = await Promise.all(tasks)
+  return results.filter((r): r is AgentContext => !!r)
 }
 
 // Server-side variant (recommended for use in API routes)
@@ -38,18 +38,27 @@ export async function processContextsServer(
   userId: string
 ): Promise<AgentContext[]> {
   if (!Array.isArray(contexts) || contexts.length === 0) return []
-  const results: AgentContext[] = []
-  for (const ctx of contexts) {
+  const tasks = contexts.map(async (ctx) => {
     try {
       if (ctx.kind === 'past_chat' && ctx.chatId) {
-        const processed = await processPastChatFromDb(ctx.chatId, userId)
-        if (processed) results.push(processed)
+        return await processPastChatFromDb(ctx.chatId, userId)
       }
+      return null
     } catch (error) {
       logger.error('Failed processing context (server)', { ctx, error })
+      return null
     }
-  }
-  return results
+  })
+  const results = await Promise.all(tasks)
+  const filtered = results.filter((r): r is AgentContext => !!r && typeof r.content === 'string' && r.content.trim().length > 0)
+  logger.info('Processed contexts (server)', {
+    totalRequested: contexts.length,
+    totalProcessed: filtered.length,
+    kinds: Array.from(
+      filtered.reduce((s, r) => s.add(r.type), new Set<string>())
+    ),
+  })
+  return filtered
 }
 
 async function processPastChatFromDb(chatId: string, userId: string): Promise<AgentContext | null> {
@@ -76,6 +85,11 @@ async function processPastChatFromDb(chatId: string, userId: string): Promise<Ag
       })
       .filter((s: string) => s.length > 0)
       .join('\n')
+    logger.info('Processed past_chat context from DB', {
+      chatId,
+      length: content.length,
+      lines: content ? content.split('\n').length : 0,
+    })
     return { type: 'past_chat', content }
   } catch (error) {
     logger.error('Error processing past chat from db', { chatId, error })
@@ -109,6 +123,7 @@ async function processPastChat(chatId: string): Promise<AgentContext | null> {
       })
       .filter((s: string) => s.length > 0)
       .join('\n')
+    logger.info('Processed past_chat context via API', { chatId, length: content.length })
 
     return { type: 'past_chat', content }
   } catch (error) {

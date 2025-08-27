@@ -1495,6 +1495,17 @@ export const useCopilotStore = create<CopilotStore>()(
       }
 
       try {
+        // Debug: log contexts presence before sending
+        try {
+          logger.info('sendMessage: preparing request', {
+            hasContexts: Array.isArray(contexts),
+            contextsCount: Array.isArray(contexts) ? contexts.length : 0,
+            contextsPreview: Array.isArray(contexts)
+              ? contexts.map((c: any) => ({ kind: c?.kind, chatId: (c as any)?.chatId, workflowId: (c as any)?.workflowId, label: (c as any)?.label }))
+              : undefined,
+          })
+        } catch {}
+
         const result = await sendStreamingMessage({
           message,
           userMessageId: userMessage.id,
@@ -1506,6 +1517,7 @@ export const useCopilotStore = create<CopilotStore>()(
           createNewChat: !currentChat,
           stream,
           fileAttachments,
+          contexts,
           abortSignal: abortController.signal,
         })
 

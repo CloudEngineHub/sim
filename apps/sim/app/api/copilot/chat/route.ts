@@ -93,6 +93,15 @@ export async function POST(req: NextRequest) {
       conversationId,
       contexts,
     } = ChatMessageSchema.parse(body)
+    try {
+      logger.info(`[${tracker.requestId}] Received chat POST`, {
+        hasContexts: Array.isArray(contexts),
+        contextsCount: Array.isArray(contexts) ? contexts.length : 0,
+        contextsPreview: Array.isArray(contexts)
+          ? contexts.map((c: any) => ({ kind: c?.kind, chatId: c?.chatId, workflowId: c?.workflowId, label: c?.label }))
+          : undefined,
+      })
+    } catch {}
     // Preprocess contexts server-side
     let agentContexts: Array<{ type: string; content: string }> = []
     if (Array.isArray(contexts) && contexts.length > 0) {
@@ -100,6 +109,11 @@ export async function POST(req: NextRequest) {
         const { processContextsServer } = await import('@/lib/copilot/process-contents')
         const processed = await processContextsServer(contexts as any, authenticatedUserId)
         agentContexts = processed
+        logger.info(`[${tracker.requestId}] Contexts processed for request`, {
+          processedCount: agentContexts.length,
+          kinds: agentContexts.map((c) => c.type),
+          lengthPreview: agentContexts.map((c) => c.content?.length ?? 0),
+        })
       } catch (e) {
         logger.error(`[${tracker.requestId}] Failed to process contexts`, e)
       }
@@ -334,8 +348,14 @@ export async function POST(req: NextRequest) {
       ...(typeof effectiveDepth === 'number' ? { depth: effectiveDepth } : {}),
       ...(typeof effectivePrefetch === 'boolean' ? { prefetch: effectivePrefetch } : {}),
       ...(session?.user?.name && { userName: session.user.name }),
-      ...(agentContexts.length > 0 && { contexts: agentContexts }),
+      ...(agentContexts.length > 0 && { context: agentContexts }),
     }
+
+    try {
+      logger.info(`[${tracker.requestId}] About to call Sim Agent with context`, {
+        context: (requestPayload as any).context,
+      })
+    } catch {}
 
     const simAgentResponse = await fetch(`${SIM_AGENT_API_URL}/api/chat-completion-streaming`, {
       method: 'POST',
