@@ -35,6 +35,8 @@ import { GetWorkflowConsoleClientTool } from '@/lib/copilot/tools/client/workflo
 import { RunWorkflowClientTool } from '@/lib/copilot/tools/client/workflow/run-workflow'
 import { ListUserWorkflowsClientTool } from '@/lib/copilot/tools/client/workflow/list-user-workflows'
 import { GetWorkflowFromNameClientTool } from '@/lib/copilot/tools/client/workflow/get-workflow-from-name'
+import { GetGlobalWorkflowVariablesClientTool } from '@/lib/copilot/tools/client/workflow/get-global-workflow-variables'
+import { SetGlobalWorkflowVariablesClientTool } from '@/lib/copilot/tools/client/workflow/set-global-workflow-variables'
 import { createLogger } from '@/lib/logs/console/logger'
 import type {
   CopilotMessage,
@@ -79,6 +81,8 @@ const CLIENT_TOOL_INSTANTIATORS: Record<string, (id: string) => any> = {
   get_user_workflow: (id) => new GetUserWorkflowClientTool(id),
   list_user_workflows: (id) => new ListUserWorkflowsClientTool(id),
   get_workflow_from_name: (id) => new GetWorkflowFromNameClientTool(id),
+  get_global_workflow_variables: (id) => new GetGlobalWorkflowVariablesClientTool(id),
+  set_global_workflow_variables: (id) => new SetGlobalWorkflowVariablesClientTool(id),
 }
 
 // Read-only static metadata for class-based tools (no instances)
@@ -104,6 +108,8 @@ export const CLASS_TOOL_METADATA: Record<string, BaseClientToolMetadata | undefi
   get_user_workflow: (GetUserWorkflowClientTool as any)?.metadata,
   list_user_workflows: (ListUserWorkflowsClientTool as any)?.metadata,
   get_workflow_from_name: (GetWorkflowFromNameClientTool as any)?.metadata,
+  get_global_workflow_variables: (GetGlobalWorkflowVariablesClientTool as any)?.metadata,
+  set_global_workflow_variables: (SetGlobalWorkflowVariablesClientTool as any)?.metadata,
 }
 
 function ensureClientToolInstance(toolName: string | undefined, toolCallId: string | undefined) {

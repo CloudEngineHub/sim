@@ -76,7 +76,8 @@ export function ToolCallExecution({ toolCall, isCompact = false }: ToolCallProps
             {toolCall.parameters &&
               Object.keys(toolCall.parameters).length > 0 &&
               (toolCall.name === 'make_api_request' ||
-                toolCall.name === 'set_environment_variables') && (
+                toolCall.name === 'set_environment_variables' ||
+                toolCall.name === 'set_global_workflow_variables') && (
                 <div className='min-w-0 max-w-full rounded bg-amber-100 p-2 dark:bg-amber-900'>
                   <div className='mb-1 font-medium text-amber-800 text-xs dark:text-amber-200'>
                     Parameters:

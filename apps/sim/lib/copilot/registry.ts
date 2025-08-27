@@ -25,6 +25,9 @@ export const ToolIds = z.enum([
   // New tools
   'list_user_workflows',
   'get_workflow_from_name',
+  // New variable tools
+  'get_global_workflow_variables',
+  'set_global_workflow_variables',
 ])
 export type ToolId = z.infer<typeof ToolIds>
 
@@ -51,6 +54,18 @@ export const ToolArgSchemas = {
   // New tools
   list_user_workflows: z.object({}),
   get_workflow_from_name: z.object({ workflow_name: z.string() }),
+  // New variable tools
+  get_global_workflow_variables: z.object({}),
+  set_global_workflow_variables: z.object({
+    operations: z.array(
+      z.object({
+        operation: z.enum(['add', 'delete', 'edit']),
+        name: z.string(),
+        type: z.enum(['plain', 'number', 'boolean', 'array', 'object']).optional(),
+        value: z.string().optional(),
+      })
+    ),
+  }),
 
   build_workflow: z.object({
     yamlContent: z.string(),
@@ -164,6 +179,15 @@ export const ToolSSESchemas = {
     'get_workflow_from_name',
     ToolArgSchemas.get_workflow_from_name
   ),
+  // New variable tools
+  get_global_workflow_variables: toolCallSSEFor(
+    'get_global_workflow_variables',
+    ToolArgSchemas.get_global_workflow_variables
+  ),
+  set_global_workflow_variables: toolCallSSEFor(
+    'set_global_workflow_variables',
+    ToolArgSchemas.set_global_workflow_variables
+  ),
   build_workflow: toolCallSSEFor('build_workflow', ToolArgSchemas.build_workflow),
   edit_workflow: toolCallSSEFor('edit_workflow', ToolArgSchemas.edit_workflow),
   run_workflow: toolCallSSEFor('run_workflow', ToolArgSchemas.run_workflow),
@@ -243,6 +267,13 @@ export const ToolResultSchemas = {
     .object({ yamlContent: z.string() })
     .or(z.object({ userWorkflow: z.string() }))
     .or(z.string()),
+  // New variable tools
+  get_global_workflow_variables: z.object({ variables: z.record(z.any()) }).or(
+    z.array(z.object({ name: z.string(), value: z.any() }))
+  ),
+  set_global_workflow_variables: z
+    .object({ variables: z.record(z.any()) })
+    .or(z.object({ message: z.any().optional(), data: z.any().optional() })),
 
   build_workflow: BuildOrEditWorkflowResult,
   edit_workflow: BuildOrEditWorkflowResult,

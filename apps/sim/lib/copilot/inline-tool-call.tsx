@@ -255,11 +255,15 @@ export function InlineToolCall({
 
   const isExpandablePending =
     toolCall.state === 'pending' &&
-    (toolCall.name === 'make_api_request' || toolCall.name === 'set_environment_variables')
+    (toolCall.name === 'make_api_request' ||
+      toolCall.name === 'set_environment_variables' ||
+      toolCall.name === 'set_global_workflow_variables')
 
   const [expanded, setExpanded] = useState(isExpandablePending)
   const isExpandableTool =
-    toolCall.name === 'make_api_request' || toolCall.name === 'set_environment_variables'
+    toolCall.name === 'make_api_request' ||
+    toolCall.name === 'set_environment_variables' ||
+    toolCall.name === 'set_global_workflow_variables'
 
   const showButtons = shouldShowRunSkipButtons(toolCall)
   const showMoveToBackground =
@@ -315,6 +319,41 @@ export function InlineToolCall({
                   <span className='font-medium text-muted-foreground text-xs'>{k}</span>
                   <span className='mx-1 font-medium text-muted-foreground text-xs'>:</span>
                   <span className='truncate font-medium text-foreground text-xs'>{String(v)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )
+    }
+
+    if (toolCall.name === 'set_global_workflow_variables') {
+      const ops = Array.isArray(params.operations) ? (params.operations as any[]) : []
+      return (
+        <div className='mt-0.5'>
+          {ops.length === 0 ? (
+            <span className='text-muted-foreground text-xs'>No operations provided</span>
+          ) : (
+            <div className='space-y-0.5'>
+              {ops.map((op, idx) => (
+                <div key={idx} className='flex items-center gap-1'>
+                  <span className='rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground'>
+                    {String(op.operation || '').toUpperCase()}
+                  </span>
+                  <span className='font-medium text-muted-foreground text-xs'>{String(op.name || '')}</span>
+                  {op.type ? (
+                    <span className='rounded border px-1 py-0.5 text-[10px] text-muted-foreground'>
+                      {String(op.type)}
+                    </span>
+                  ) : null}
+                  {op.value !== undefined ? (
+                    <>
+                      <span className='mx-1 font-medium text-muted-foreground text-xs'>=</span>
+                      <span className='truncate font-mono text-foreground text-xs'>
+                        {String(op.value)}
+                      </span>
+                    </>
+                  ) : null}
                 </div>
               ))}
             </div>
