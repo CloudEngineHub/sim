@@ -37,7 +37,17 @@ export interface CopilotMessage {
     | { type: 'tool_call'; toolCall: CopilotToolCall; timestamp: number }
   >
   fileAttachments?: MessageFileAttachment[]
+  contexts?: ChatContext[]
 }
+
+// Contexts attached to a user message
+export type ChatContext =
+  | { kind: 'past_chat'; chatId: string; label: string }
+  | { kind: 'workflow'; workflowId: string; label: string }
+  | { kind: 'blocks'; blockIds: string[]; label: string }
+  | { kind: 'logs'; label: string }
+  | { kind: 'knowledge'; knowledgeId?: string; label: string }
+  | { kind: 'templates'; templateId?: string; label: string }
 
 export interface CopilotChat {
   id: string
@@ -107,7 +117,7 @@ export interface CopilotActions {
 
   sendMessage: (
     message: string,
-    options?: { stream?: boolean; fileAttachments?: MessageFileAttachment[] }
+    options?: { stream?: boolean; fileAttachments?: MessageFileAttachment[]; contexts?: ChatContext[] }
   ) => Promise<void>
   abortMessage: () => void
   sendImplicitFeedback: (

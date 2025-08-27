@@ -43,6 +43,7 @@ import type {
   CopilotStore,
   CopilotToolCall,
   MessageFileAttachment,
+  ChatContext,
 } from '@/stores/copilot/types'
 import { useWorkflowDiffStore } from '@/stores/workflow-diff/store'
 import { useSubBlockStore } from '@/stores/workflows/subblock/store'
@@ -408,7 +409,8 @@ class StringBuilder {
 // Helpers
 function createUserMessage(
   content: string,
-  fileAttachments?: MessageFileAttachment[]
+  fileAttachments?: MessageFileAttachment[],
+  contexts?: ChatContext[]
 ): CopilotMessage {
   return {
     id: crypto.randomUUID(),
@@ -416,6 +418,7 @@ function createUserMessage(
     content,
     timestamp: new Date().toISOString(),
     ...(fileAttachments && fileAttachments.length > 0 && { fileAttachments }),
+    ...(contexts && contexts.length > 0 && { contexts }),
   }
 }
 
@@ -480,6 +483,9 @@ function validateMessagesForLLM(messages: CopilotMessage[]): any[] {
           msg.fileAttachments.length > 0 && {
             fileAttachments: msg.fileAttachments,
           }),
+        ...((msg as any).contexts && Array.isArray((msg as any).contexts) && {
+          contexts: (msg as any).contexts,
+        }),
       }
     })
     .filter((m) => {
@@ -1454,16 +1460,17 @@ export const useCopilotStore = create<CopilotStore>()(
     // Send a message (streaming only)
     sendMessage: async (message: string, options = {}) => {
       const { workflowId, currentChat, mode, revertState } = get()
-      const { stream = true, fileAttachments } = options as {
+      const { stream = true, fileAttachments, contexts } = options as {
         stream?: boolean
         fileAttachments?: MessageFileAttachment[]
+        contexts?: ChatContext[]
       }
       if (!workflowId) return
 
       const abortController = new AbortController()
       set({ isSendingMessage: true, error: null, abortController })
 
-      const userMessage = createUserMessage(message, fileAttachments)
+      const userMessage = createUserMessage(message, fileAttachments, contexts)
       const streamingMessage = createStreamingMessage()
 
       let newMessages: CopilotMessage[]

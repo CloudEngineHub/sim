@@ -17,6 +17,7 @@ import {
   Image,
   Infinity as InfinityIcon,
   Info,
+  ChevronRight,
   Loader2,
   MessageCircle,
   Package,
@@ -37,11 +38,13 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui'
+import { Input } from '@/components/ui'
 import { useSession } from '@/lib/auth-client'
 import { createLogger } from '@/lib/logs/console/logger'
 import { cn } from '@/lib/utils'
 import { CopilotSlider } from '@/app/workspace/[workspaceId]/w/[workflowId]/components/panel/components/copilot/components/user-input/components/copilot-slider'
 import { useCopilotStore } from '@/stores/copilot/store'
+import type { ChatContext } from '@/stores/copilot/types'
 
 const logger = createLogger('CopilotUserInput')
 
@@ -65,7 +68,7 @@ interface AttachedFile {
 }
 
 interface UserInputProps {
-  onSubmit: (message: string, fileAttachments?: MessageFileAttachment[]) => void
+  onSubmit: (message: string, fileAttachments?: MessageFileAttachment[], contexts?: ChatContext[]) => void
   onAbort?: () => void
   disabled?: boolean
   isLoading?: boolean
@@ -106,6 +109,17 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
     const [dragCounter, setDragCounter] = useState(0)
     const textareaRef = useRef<HTMLTextAreaElement>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)
+    const [showMentionMenu, setShowMentionMenu] = useState(false)
+    const mentionMenuRef = useRef<HTMLDivElement>(null)
+    const submenuRef = useRef<HTMLDivElement>(null)
+    const [mentionActiveIndex, setMentionActiveIndex] = useState(0)
+    const mentionOptions = ['Past Chat', 'Workflow', 'Blocks', 'Logs', 'Knowledge', 'Templates']
+    const [openSubmenuFor, setOpenSubmenuFor] = useState<string | null>(null)
+    const [submenuActiveIndex, setSubmenuActiveIndex] = useState(0)
+    const [pastChats, setPastChats] = useState<Array<{ id: string; title: string | null; workflowId: string | null; updatedAt?: string }>>([])
+    const [isLoadingPastChats, setIsLoadingPastChats] = useState(false)
+    const [pastChatsQuery, setPastChatsQuery] = useState('')
+    const [selectedContexts, setSelectedContexts] = useState<ChatContext[]>([])
 
     const { data: session } = useSession()
     const { currentChat, workflowId } = useCopilotStore()
@@ -137,6 +151,48 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
         textarea.style.overflowY = textarea.scrollHeight > maxHeight ? 'auto' : 'hidden'
       }
     }, [message])
+
+    // Close mention menu on outside click
+    useEffect(() => {
+      if (!showMentionMenu) return
+      const handleClickOutside = (e: MouseEvent) => {
+        const target = e.target as Node | null
+        if (
+          mentionMenuRef.current &&
+          !mentionMenuRef.current.contains(target) &&
+          (!submenuRef.current || !submenuRef.current.contains(target)) &&
+          textareaRef.current &&
+          !textareaRef.current.contains(target as Node)
+        ) {
+          setShowMentionMenu(false)
+          setOpenSubmenuFor(null)
+        }
+      }
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => document.removeEventListener('mousedown', handleClickOutside)
+    }, [showMentionMenu])
+
+    const ensurePastChatsLoaded = async () => {
+      if (isLoadingPastChats || pastChats.length > 0) return
+      try {
+        setIsLoadingPastChats(true)
+        const resp = await fetch('/api/copilot/chats')
+        if (!resp.ok) throw new Error(`Failed to load chats: ${resp.status}`)
+        const data = await resp.json()
+        const items = Array.isArray(data?.chats) ? data.chats : []
+        setPastChats(
+          items.map((c: any) => ({
+            id: c.id,
+            title: c.title ?? null,
+            workflowId: c.workflowId ?? null,
+            updatedAt: c.updatedAt,
+          }))
+        )
+      } catch {
+      } finally {
+        setIsLoadingPastChats(false)
+      }
+    }
 
     // Cleanup preview URLs on unmount
     useEffect(() => {
@@ -304,7 +360,7 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
           size: f.size,
         }))
 
-      onSubmit(trimmedMessage, fileAttachments)
+      onSubmit(trimmedMessage, fileAttachments, selectedContexts)
 
       // Clean up preview URLs before clearing
       attachedFiles.forEach((f) => {
@@ -320,6 +376,9 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
         setInternalMessage('')
       }
       setAttachedFiles([])
+      setSelectedContexts([])
+      setOpenSubmenuFor(null)
+      setShowMentionMenu(false)
     }
 
     const handleAbort = () => {
@@ -329,9 +388,121 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
     }
 
     const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+      if (e.key === 'Escape' && showMentionMenu) {
+        setShowMentionMenu(false)
+        setOpenSubmenuFor(null)
+        return
+      }
+      if (showMentionMenu && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+        e.preventDefault()
+        if (openSubmenuFor === 'Past Chat' && pastChats.length > 0) {
+          setSubmenuActiveIndex((prev) => {
+            const last = pastChats.length - 1
+            if (e.key === 'ArrowDown') return prev >= last ? 0 : prev + 1
+            return prev <= 0 ? last : prev - 1
+          })
+        } else {
+          setMentionActiveIndex((prev) => {
+            const last = mentionOptions.length - 1
+            if (e.key === 'ArrowDown') return prev >= last ? 0 : prev + 1
+            return prev <= 0 ? last : prev - 1
+          })
+        }
+        return
+      }
+      if (showMentionMenu && e.key === 'ArrowRight') {
+        e.preventDefault()
+        const selected = mentionOptions[mentionActiveIndex]
+        if (selected === 'Past Chat') {
+          setOpenSubmenuFor('Past Chat')
+          setSubmenuActiveIndex(0)
+          void ensurePastChatsLoaded()
+        }
+        return
+      }
+      if (showMentionMenu && e.key === 'ArrowLeft') {
+        if (openSubmenuFor) {
+          e.preventDefault()
+          setOpenSubmenuFor(null)
+          return
+        }
+      }
+
+      // Mention token behavior (outside of menus)
+      const textarea = textareaRef.current
+      const selStart = textarea?.selectionStart ?? 0
+      const selEnd = textarea?.selectionEnd ?? selStart
+      const selectionLength = Math.abs(selEnd - selStart)
+
+      // Backspace: delete entire token if cursor is inside or right after token
+      if (!showMentionMenu && e.key === 'Backspace') {
+        const pos = selStart
+        const ranges = computeMentionRanges()
+        // If there is a selection intersecting a token, delete those tokens
+        const target =
+          selectionLength > 0
+            ? ranges.find((r) => !(selEnd <= r.start || selStart >= r.end))
+            : ranges.find((r) => pos > r.start && pos <= r.end)
+        if (target) {
+          e.preventDefault()
+          deleteRange(target)
+          return
+        }
+      }
+
+      // Delete: if at start of token, delete whole token
+      if (!showMentionMenu && e.key === 'Delete') {
+        const pos = selStart
+        const ranges = computeMentionRanges()
+        const target = ranges.find((r) => pos >= r.start && pos < r.end)
+        if (target) {
+          e.preventDefault()
+          deleteRange(target)
+          return
+        }
+      }
+
+      // Prevent typing inside token
+      if (!showMentionMenu && (e.key.length === 1 || e.key === 'Space')) {
+        const pos = selStart
+        const ranges = computeMentionRanges()
+        // If any selection overlaps a token, block
+        const blocked =
+          (selectionLength > 0 && ranges.some((r) => !(selEnd <= r.start || selStart >= r.end))) ||
+          (!!findRangeContaining(pos) && !!findRangeContaining(pos)?.label)
+        if (blocked) {
+          e.preventDefault()
+          // Move caret to end of the token
+          const r = findRangeContaining(pos)
+          if (r && textarea) {
+            requestAnimationFrame(() => {
+              textarea.setSelectionRange(r.end, r.end)
+            })
+          }
+          return
+        }
+      }
+
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault()
-        handleSubmit()
+        if (!showMentionMenu) {
+          handleSubmit()
+        } else {
+          const selected = mentionOptions[mentionActiveIndex]
+          if (!openSubmenuFor && selected === 'Past Chat') {
+            setOpenSubmenuFor('Past Chat')
+            setSubmenuActiveIndex(0)
+            void ensurePastChatsLoaded()
+          } else if (openSubmenuFor === 'Past Chat') {
+            const filtered = pastChats.filter((c) =>
+              (c.title || 'Untitled Chat').toLowerCase().includes(pastChatsQuery.toLowerCase())
+            )
+            if (filtered.length > 0) {
+              const chosen = filtered[Math.max(0, Math.min(submenuActiveIndex, filtered.length - 1))]
+              insertPastChatMention(chosen)
+            }
+          }
+        }
       }
     }
 
@@ -342,6 +513,66 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
       } else {
         setInternalMessage(newValue)
       }
+      if (newValue.endsWith('@')) {
+        setMentionActiveIndex(0)
+        setShowMentionMenu(true)
+        setOpenSubmenuFor(null)
+      } else if (showMentionMenu) {
+        setShowMentionMenu(false)
+        setOpenSubmenuFor(null)
+      }
+    }
+
+    const handleSelectAdjust = () => {
+      const textarea = textareaRef.current
+      if (!textarea) return
+      const pos = textarea.selectionStart ?? 0
+      const r = findRangeContaining(pos)
+      if (r) {
+        // Snap caret to token boundary to avoid typing inside
+        const snapPos = pos - r.start < r.end - pos ? r.start : r.end
+        requestAnimationFrame(() => {
+          textarea.setSelectionRange(snapPos, snapPos)
+        })
+      }
+    }
+
+    const insertAtCursor = (text: string) => {
+      const textarea = textareaRef.current
+      if (!textarea) return
+      const start = textarea.selectionStart ?? message.length
+      const end = textarea.selectionEnd ?? message.length
+      let before = message.slice(0, start)
+      const after = message.slice(end)
+      // Avoid duplicate '@' if user typed trigger
+      if (before.endsWith('@') && text.startsWith('@')) {
+        before = before.slice(0, -1)
+      }
+      const next = `${before}${text}${after}`
+      if (controlledValue !== undefined) {
+        onControlledChange?.(next)
+      } else {
+        setInternalMessage(next)
+      }
+      // Move cursor to after inserted text
+      setTimeout(() => {
+        const pos = before.length + text.length
+        textarea.setSelectionRange(pos, pos)
+        textarea.focus()
+      }, 0)
+    }
+
+    const insertPastChatMention = (chat: { id: string; title: string | null }) => {
+      const label = chat.title || 'Untitled Chat'
+      const token = `@${label}`
+      insertAtCursor(`${token} `)
+      setSelectedContexts((prev) => {
+        // Avoid duplicate contexts for same chat
+        if (prev.some((c) => c.kind === 'past_chat' && (c as any).chatId === chat.id)) return prev
+        return [...prev, { kind: 'past_chat', chatId: chat.id, label } as ChatContext]
+      })
+      setShowMentionMenu(false)
+      setOpenSubmenuFor(null)
     }
 
     const handleFileSelect = () => {
@@ -409,6 +640,55 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
         return <FileText className='h-5 w-5 text-blue-500' />
       }
       return <FileText className='h-5 w-5 text-muted-foreground' />
+    }
+
+    // Mention token utilities
+    const computeMentionRanges = () => {
+      const ranges: Array<{ start: number; end: number; label: string }> = []
+      if (!message || selectedContexts.length === 0) return ranges
+      // Build labels map for quick search
+      const labels = selectedContexts.map((c) => c.label).filter(Boolean)
+      if (labels.length === 0) return ranges
+      // For each label, find all occurrences of @label (case-sensitive)
+      for (const label of labels) {
+        const token = `@${label}`
+        let fromIndex = 0
+        while (fromIndex <= message.length) {
+          const idx = message.indexOf(token, fromIndex)
+          if (idx === -1) break
+          ranges.push({ start: idx, end: idx + token.length, label })
+          fromIndex = idx + token.length
+        }
+      }
+      // Sort by start
+      ranges.sort((a, b) => a.start - b.start)
+      return ranges
+    }
+
+    const findRangeContaining = (pos: number) => {
+      const ranges = computeMentionRanges()
+      return ranges.find((r) => pos >= r.start && pos <= r.end)
+    }
+
+    const deleteRange = (range: { start: number; end: number; label: string }) => {
+      const before = message.slice(0, range.start)
+      const after = message.slice(range.end)
+      const next = `${before}${after}`.replace(/\s{2,}/g, ' ')
+      if (controlledValue !== undefined) {
+        onControlledChange?.(next)
+      } else {
+        setInternalMessage(next)
+      }
+      // Remove corresponding context by label
+      setSelectedContexts((prev) => prev.filter((c) => c.label !== range.label))
+      // Place cursor at range.start
+      requestAnimationFrame(() => {
+        const textarea = textareaRef.current
+        if (textarea) {
+          textarea.setSelectionRange(range.start, range.start)
+          textarea.focus()
+        }
+      })
     }
 
     const canSubmit = message.trim().length > 0 && !disabled && !isLoading
@@ -559,17 +839,141 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
           )}
 
           {/* Textarea Field */}
-          <Textarea
-            ref={textareaRef}
-            value={message}
-            onChange={handleInputChange}
-            onKeyDown={handleKeyDown}
-            placeholder={isDragging ? 'Drop files here...' : placeholder}
-            disabled={disabled}
-            rows={1}
-            className='mb-2 min-h-[32px] w-full resize-none overflow-y-auto overflow-x-hidden border-0 bg-transparent px-[2px] py-1 text-foreground focus-visible:ring-0 focus-visible:ring-offset-0'
-            style={{ height: 'auto' }}
-          />
+          <div className='relative'>
+            {/* Highlight overlay */}
+            <div className='pointer-events-none absolute inset-0 z-[1] px-[2px] py-1'>
+              <pre className='whitespace-pre-wrap font-sans text-sm leading-[1.25rem] text-foreground'>
+                {(() => {
+                  const elements: React.ReactNode[] = []
+                  let remaining = message
+                  const contexts = selectedContexts
+                  if (contexts.length === 0 || !remaining) return remaining
+                  // Build regex for all labels
+                  const labels = contexts.map((c) => c.label).filter(Boolean)
+                  const pattern = new RegExp(
+                    `@(${labels.map((l) => l.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`,
+                    'g'
+                  )
+                  let lastIndex = 0
+                  let match: RegExpExecArray | null
+                  while ((match = pattern.exec(remaining)) !== null) {
+                    const i = match.index
+                    const before = remaining.slice(lastIndex, i)
+                    if (before) elements.push(before)
+                    const mentionText = match[0]
+                    elements.push(
+                      <span key={`${mentionText}-${i}-${lastIndex}`} className='rounded-[6px] bg-muted'>
+                        {mentionText}
+                      </span>
+                    )
+                    lastIndex = i + mentionText.length
+                  }
+                  const tail = remaining.slice(lastIndex)
+                  if (tail) elements.push(tail)
+                  return elements
+                })()}
+              </pre>
+            </div>
+            <Textarea
+              ref={textareaRef}
+              value={message}
+              onChange={handleInputChange}
+              onKeyDown={handleKeyDown}
+              onSelect={handleSelectAdjust}
+              onMouseUp={handleSelectAdjust}
+              placeholder={isDragging ? 'Drop files here...' : placeholder}
+              disabled={disabled}
+              rows={1}
+              className='relative z-[2] mb-2 min-h-[32px] w-full resize-none overflow-y-auto overflow-x-hidden border-0 bg-transparent px-[2px] py-1 text-transparent caret-foreground focus-visible:ring-0 focus-visible:ring-offset-0 font-sans text-sm leading-[1.25rem]'
+              style={{ height: 'auto' }}
+            />
+            {showMentionMenu && (
+              <>
+                <div
+                  ref={mentionMenuRef}
+                  className='absolute left-0 bottom-full z-50 mb-1 w-56 rounded-[8px] border bg-popover p-1 text-foreground shadow-md max-h-64 overflow-auto'
+                >
+                  {mentionOptions.map((label, idx) => (
+                    <div
+                      key={label}
+                      className={cn(
+                        'flex items-center justify-between gap-2 cursor-default rounded-[6px] px-2 py-1.5 text-sm hover:bg-muted/60',
+                        mentionActiveIndex === idx && 'bg-muted'
+                      )}
+                      role='menuitem'
+                      aria-selected={mentionActiveIndex === idx}
+                      onMouseEnter={() => setMentionActiveIndex(idx)}
+                      onClick={() => {
+                        if (label === 'Past Chat') {
+                          setOpenSubmenuFor('Past Chat')
+                          setSubmenuActiveIndex(0)
+                          void ensurePastChatsLoaded()
+                        }
+                      }}
+                    >
+                      <span>{label}</span>
+                      <ChevronRight className='h-3.5 w-3.5 text-muted-foreground' />
+                    </div>
+                  ))}
+                </div>
+
+                {openSubmenuFor === 'Past Chat' && (
+                  <div
+                    ref={submenuRef}
+                    className='absolute bottom-full z-50 mb-1 left-[calc(14rem+4px)] w-72 rounded-[8px] border bg-popover p-1 text-foreground shadow-md max-h-64 overflow-auto'
+                  >
+                    <div className='px-2 py-1.5 text-muted-foreground text-xs'>Past Chats</div>
+                    <div className='px-2 pb-1'>
+                      <Input
+                        value={pastChatsQuery}
+                        onChange={(e) => {
+                          setPastChatsQuery(e.target.value)
+                          setSubmenuActiveIndex(0)
+                        }}
+                        placeholder='Search chats...'
+                        className='h-7 rounded-[6px] border bg-background px-2 text-xs focus-visible:ring-0 focus-visible:ring-offset-0'
+                      />
+                    </div>
+                    <div className='h-px w-full bg-border my-1' />
+                    <div className='max-h-64 overflow-auto'>
+                      {isLoadingPastChats ? (
+                        <div className='px-2 py-2 text-muted-foreground text-sm'>Loading...</div>
+                      ) : pastChats.length === 0 ? (
+                        <div className='px-2 py-2 text-muted-foreground text-sm'>No past chats</div>
+                      ) : (
+                        pastChats
+                          .filter((c) =>
+                            (c.title || 'Untitled Chat')
+                              .toLowerCase()
+                              .includes(pastChatsQuery.toLowerCase())
+                          )
+                          .map((chat, idx) => (
+                            <div
+                              key={chat.id}
+                              className={cn(
+                                'flex items-center gap-2 rounded-[6px] px-2 py-1.5 text-sm hover:bg-muted/60',
+                                submenuActiveIndex === idx && 'bg-muted'
+                              )}
+                              role='menuitem'
+                              aria-selected={submenuActiveIndex === idx}
+                              onMouseEnter={() => setSubmenuActiveIndex(idx)}
+                              onClick={() => insertPastChatMention(chat)}
+                            >
+                              {chat.workflowId && chat.workflowId === workflowId ? (
+                                <Package className='h-3.5 w-3.5 text-muted-foreground' />
+                              ) : (
+                                <div className='h-3.5 w-3.5' />
+                              )}
+                              <span className='truncate'>{chat.title || 'Untitled Chat'}</span>
+                            </div>
+                          ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
 
           {/* Bottom Row: Mode Selector + Attach Button + Send Button */}
           <div className='flex items-center justify-between'>
