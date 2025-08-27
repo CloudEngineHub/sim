@@ -408,7 +408,36 @@ const CopilotMessage: FC<CopilotMessageProps> = memo(
                 }}
               >
                 <div className='whitespace-pre-wrap break-words font-normal text-base text-foreground leading-relaxed'>
-                  <WordWrap text={message.content} />
+                  {(() => {
+                    const text = message.content || ''
+                    const contexts: any[] = Array.isArray((message as any).contexts)
+                      ? ((message as any).contexts as any[])
+                      : []
+                    const labels = contexts.map((c) => c?.label).filter(Boolean) as string[]
+                    if (!labels.length) return <WordWrap text={text} />
+
+                    const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+                    const pattern = new RegExp(`@(${labels.map(escape).join('|')})`, 'g')
+
+                    const nodes: React.ReactNode[] = []
+                    let lastIndex = 0
+                    let match: RegExpExecArray | null
+                    while ((match = pattern.exec(text)) !== null) {
+                      const i = match.index
+                      const before = text.slice(lastIndex, i)
+                      if (before) nodes.push(before)
+                      const mention = match[0]
+                      nodes.push(
+                        <span key={`mention-${i}-${lastIndex}`} className='rounded-[6px] bg-muted px-1'>
+                          {mention}
+                        </span>
+                      )
+                      lastIndex = i + mention.length
+                    }
+                    const tail = text.slice(lastIndex)
+                    if (tail) nodes.push(tail)
+                    return nodes
+                  })()}
                 </div>
               </div>
             </div>

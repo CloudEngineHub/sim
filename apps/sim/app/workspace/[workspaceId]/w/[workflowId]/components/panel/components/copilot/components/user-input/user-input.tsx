@@ -120,6 +120,9 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
     const [isLoadingPastChats, setIsLoadingPastChats] = useState(false)
     const [pastChatsQuery, setPastChatsQuery] = useState('')
     const [selectedContexts, setSelectedContexts] = useState<ChatContext[]>([])
+    const [workflows, setWorkflows] = useState<Array<{ id: string; name: string }>>([])
+    const [isLoadingWorkflows, setIsLoadingWorkflows] = useState(false)
+    const [workflowsQuery, setWorkflowsQuery] = useState('')
 
     const { data: session } = useSession()
     const { currentChat, workflowId } = useCopilotStore()
@@ -191,6 +194,21 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
       } catch {
       } finally {
         setIsLoadingPastChats(false)
+      }
+    }
+
+    const ensureWorkflowsLoaded = async () => {
+      if (isLoadingWorkflows || workflows.length > 0) return
+      try {
+        setIsLoadingWorkflows(true)
+        const resp = await fetch('/api/workflows/sync')
+        if (!resp.ok) throw new Error(`Failed to load workflows: ${resp.status}`)
+        const data = await resp.json()
+        const items = Array.isArray(data?.data) ? data.data : []
+        setWorkflows(items.map((w: any) => ({ id: w.id, name: w.name || 'Untitled Workflow' })))
+      } catch {}
+      finally {
+        setIsLoadingWorkflows(false)
       }
     }
 
@@ -401,6 +419,12 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
             if (e.key === 'ArrowDown') return prev >= last ? 0 : prev + 1
             return prev <= 0 ? last : prev - 1
           })
+        } else if (openSubmenuFor === 'Workflow' && workflows.length > 0) {
+          setSubmenuActiveIndex((prev) => {
+            const last = workflows.length - 1
+            if (e.key === 'ArrowDown') return prev >= last ? 0 : prev + 1
+            return prev <= 0 ? last : prev - 1
+          })
         } else {
           setMentionActiveIndex((prev) => {
             const last = mentionOptions.length - 1
@@ -417,6 +441,10 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
           setOpenSubmenuFor('Past Chat')
           setSubmenuActiveIndex(0)
           void ensurePastChatsLoaded()
+        } else if (selected === 'Workflow') {
+          setOpenSubmenuFor('Workflow')
+          setSubmenuActiveIndex(0)
+          void ensureWorkflowsLoaded()
         }
         return
       }
@@ -501,6 +529,18 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
               const chosen = filtered[Math.max(0, Math.min(submenuActiveIndex, filtered.length - 1))]
               insertPastChatMention(chosen)
             }
+          } else if (!openSubmenuFor && selected === 'Workflow') {
+            setOpenSubmenuFor('Workflow')
+            setSubmenuActiveIndex(0)
+            void ensureWorkflowsLoaded()
+          } else if (openSubmenuFor === 'Workflow') {
+            const filtered = workflows.filter((w) =>
+              (w.name || 'Untitled Workflow').toLowerCase().includes(workflowsQuery.toLowerCase())
+            )
+            if (filtered.length > 0) {
+              const chosen = filtered[Math.max(0, Math.min(submenuActiveIndex, filtered.length - 1))]
+              insertWorkflowMention(chosen)
+            }
           }
         }
       }
@@ -570,6 +610,18 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
         // Avoid duplicate contexts for same chat
         if (prev.some((c) => c.kind === 'past_chat' && (c as any).chatId === chat.id)) return prev
         return [...prev, { kind: 'past_chat', chatId: chat.id, label } as ChatContext]
+      })
+      setShowMentionMenu(false)
+      setOpenSubmenuFor(null)
+    }
+
+    const insertWorkflowMention = (wf: { id: string; name: string }) => {
+      const label = wf.name || 'Untitled Workflow'
+      const token = `@${label}`
+      insertAtCursor(`${token} `)
+      setSelectedContexts((prev) => {
+        if (prev.some((c) => c.kind === 'workflow' && (c as any).workflowId === wf.id)) return prev
+        return [...prev, { kind: 'workflow', workflowId: wf.id, label } as ChatContext]
       })
       setShowMentionMenu(false)
       setOpenSubmenuFor(null)
@@ -908,6 +960,10 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
                           setOpenSubmenuFor('Past Chat')
                           setSubmenuActiveIndex(0)
                           void ensurePastChatsLoaded()
+                        } else if (label === 'Workflow') {
+                          setOpenSubmenuFor('Workflow')
+                          setSubmenuActiveIndex(0)
+                          void ensureWorkflowsLoaded()
                         }
                       }}
                     >
@@ -965,6 +1021,57 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
                                 <div className='h-3.5 w-3.5' />
                               )}
                               <span className='truncate'>{chat.title || 'Untitled Chat'}</span>
+                            </div>
+                          ))
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {openSubmenuFor === 'Workflow' && (
+                  <div
+                    ref={submenuRef}
+                    className='absolute bottom-full z-50 mb-1 left-[calc(14rem+4px)] w-72 rounded-[8px] border bg-popover p-1 text-foreground shadow-md max-h-64 overflow-auto'
+                  >
+                    <div className='px-2 py-1.5 text-muted-foreground text-xs'>Workflows</div>
+                    <div className='px-2 pb-1'>
+                      <Input
+                        value={workflowsQuery}
+                        onChange={(e) => {
+                          setWorkflowsQuery(e.target.value)
+                          setSubmenuActiveIndex(0)
+                        }}
+                        placeholder='Search workflows...'
+                        className='h-7 rounded-[6px] border bg-background px-2 text-xs focus-visible:ring-0 focus-visible:ring-offset-0'
+                      />
+                    </div>
+                    <div className='h-px w-full bg-border my-1' />
+                    <div className='max-h-64 overflow-auto'>
+                      {isLoadingWorkflows ? (
+                        <div className='px-2 py-2 text-muted-foreground text-sm'>Loading...</div>
+                      ) : workflows.length === 0 ? (
+                        <div className='px-2 py-2 text-muted-foreground text-sm'>No workflows</div>
+                      ) : (
+                        workflows
+                          .filter((w) =>
+                            (w.name || 'Untitled Workflow')
+                              .toLowerCase()
+                              .includes(workflowsQuery.toLowerCase())
+                          )
+                          .map((wf, idx) => (
+                            <div
+                              key={wf.id}
+                              className={cn(
+                                'flex items-center gap-2 rounded-[6px] px-2 py-1.5 text-sm hover:bg-muted/60',
+                                submenuActiveIndex === idx && 'bg-muted'
+                              )}
+                              role='menuitem'
+                              aria-selected={submenuActiveIndex === idx}
+                              onMouseEnter={() => setSubmenuActiveIndex(idx)}
+                              onClick={() => insertWorkflowMention(wf)}
+                            >
+                              <div className='h-3.5 w-3.5' />
+                              <span className='truncate'>{wf.name || 'Untitled Workflow'}</span>
                             </div>
                           ))
                       )}

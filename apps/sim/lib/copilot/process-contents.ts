@@ -3,11 +3,13 @@ import type { ChatContext } from '@/stores/copilot/types'
 import { db } from '@/db'
 import { copilotChats } from '@/db/schema'
 import { and, eq } from 'drizzle-orm'
+import { loadWorkflowFromNormalizedTables } from '@/lib/workflows/db-helpers'
 
 export type AgentContextType = 'past_chat' | 'workflow' | 'blocks' | 'logs' | 'knowledge' | 'templates'
 
 export interface AgentContext {
   type: AgentContextType
+  tag: string
   content: string
 }
 
@@ -18,7 +20,10 @@ export async function processContexts(contexts: ChatContext[] | undefined): Prom
   const tasks = contexts.map(async (ctx) => {
     try {
       if (ctx.kind === 'past_chat') {
-        return await processPastChatViaApi(ctx.chatId)
+        return await processPastChatViaApi(ctx.chatId, ctx.label ? `@${ctx.label}` : '@')
+      }
+      if (ctx.kind === 'workflow' && ctx.workflowId) {
+        return await processWorkflowFromDb(ctx.workflowId, ctx.label ? `@${ctx.label}` : '@')
       }
       // Other kinds can be added here: workflow, blocks, logs, knowledge, templates
       return null
@@ -41,7 +46,10 @@ export async function processContextsServer(
   const tasks = contexts.map(async (ctx) => {
     try {
       if (ctx.kind === 'past_chat' && ctx.chatId) {
-        return await processPastChatFromDb(ctx.chatId, userId)
+        return await processPastChatFromDb(ctx.chatId, userId, ctx.label ? `@${ctx.label}` : '@')
+      }
+      if (ctx.kind === 'workflow' && ctx.workflowId) {
+        return await processWorkflowFromDb(ctx.workflowId, ctx.label ? `@${ctx.label}` : '@')
       }
       return null
     } catch (error) {
@@ -61,7 +69,11 @@ export async function processContextsServer(
   return filtered
 }
 
-async function processPastChatFromDb(chatId: string, userId: string): Promise<AgentContext | null> {
+async function processPastChatFromDb(
+  chatId: string,
+  userId: string,
+  tag: string
+): Promise<AgentContext | null> {
   try {
     const rows = await db
       .select({ messages: copilotChats.messages })
@@ -90,14 +102,40 @@ async function processPastChatFromDb(chatId: string, userId: string): Promise<Ag
       length: content.length,
       lines: content ? content.split('\n').length : 0,
     })
-    return { type: 'past_chat', content }
+    return { type: 'past_chat', tag, content }
   } catch (error) {
     logger.error('Error processing past chat from db', { chatId, error })
     return null
   }
 }
 
-async function processPastChat(chatId: string): Promise<AgentContext | null> {
+async function processWorkflowFromDb(workflowId: string, tag: string): Promise<AgentContext | null> {
+  try {
+    const normalized = await loadWorkflowFromNormalizedTables(workflowId)
+    if (!normalized) {
+      logger.warn('No normalized workflow data found', { workflowId })
+      return null
+    }
+    const workflowState = {
+      blocks: normalized.blocks || {},
+      edges: normalized.edges || [],
+      loops: normalized.loops || {},
+      parallels: normalized.parallels || {},
+    }
+    const content = JSON.stringify(workflowState, null, 2)
+    logger.info('Processed workflow context', {
+      workflowId,
+      blocks: Object.keys(workflowState.blocks || {}).length,
+      edges: workflowState.edges.length,
+    })
+    return { type: 'workflow', tag, content }
+  } catch (error) {
+    logger.error('Error processing workflow context', { workflowId, error })
+    return null
+  }
+}
+
+async function processPastChat(chatId: string, tagOverride?: string): Promise<AgentContext | null> {
   try {
     const resp = await fetch(`/api/copilot/chat/${encodeURIComponent(chatId)}`)
     if (!resp.ok) {
@@ -125,7 +163,7 @@ async function processPastChat(chatId: string): Promise<AgentContext | null> {
       .join('\n')
     logger.info('Processed past_chat context via API', { chatId, length: content.length })
 
-    return { type: 'past_chat', content }
+    return { type: 'past_chat', tag: tagOverride || '@', content }
   } catch (error) {
     logger.error('Error processing past chat', { chatId, error })
     return null
@@ -133,6 +171,6 @@ async function processPastChat(chatId: string): Promise<AgentContext | null> {
 }
 
 // Back-compat alias; used by processContexts above
-async function processPastChatViaApi(chatId: string) {
-  return processPastChat(chatId)
+async function processPastChatViaApi(chatId: string, tag?: string) {
+  return processPastChat(chatId, tag)
 } 
