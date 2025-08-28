@@ -142,6 +142,7 @@ async function processWorkflowFromDb(workflowId: string, tag: string): Promise<A
       loops: normalized.loops || {},
       parallels: normalized.parallels || {},
     }
+    // Match get-user-workflow format: just the workflow state JSON
     const content = JSON.stringify(workflowState, null, 2)
     logger.info('Processed workflow context', {
       workflowId,
@@ -306,6 +307,8 @@ async function processTemplateFromDb(templateId: string, tag: string): Promise<A
       .limit(1)
     const t = rows?.[0]
     if (!t) return null
+    const workflowState = (t as any).state || {}
+    // Match get-user-workflow format: just the workflow state JSON
     const summary = {
       id: t.id,
       name: t.name,
@@ -313,7 +316,7 @@ async function processTemplateFromDb(templateId: string, tag: string): Promise<A
       category: t.category,
       author: t.author,
       stars: t.stars || 0,
-      workflow: t.state, // exact workflow json
+      workflow: workflowState,
     }
     const content = JSON.stringify(summary)
     return { type: 'templates', tag, content }
