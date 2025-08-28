@@ -121,7 +121,7 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
     const [isLoadingPastChats, setIsLoadingPastChats] = useState(false)
     // Removed explicit submenu query inputs; we derive query from the text typed after '@'
     const [selectedContexts, setSelectedContexts] = useState<ChatContext[]>([])
-    const [workflows, setWorkflows] = useState<Array<{ id: string; name: string }>>([])
+    const [workflows, setWorkflows] = useState<Array<{ id: string; name: string; color?: string }>>([])
     const [isLoadingWorkflows, setIsLoadingWorkflows] = useState(false)
     const [knowledgeBases, setKnowledgeBases] = useState<Array<{ id: string; name: string }>>([])
     const [isLoadingKnowledge, setIsLoadingKnowledge] = useState(false)
@@ -223,7 +223,7 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
           return tb - ta
         })
         setWorkflows(
-          sorted.map((w: any) => ({ id: w.id, name: w.name || 'Untitled Workflow' }))
+          sorted.map((w: any) => ({ id: w.id, name: w.name || 'Untitled Workflow', color: w.color }))
         )
       } catch {}
       finally {
@@ -1483,7 +1483,10 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
                                       setSubmenuQueryStart(null)
                                     }}
                                   >
-                                    <div className='h-3.5 w-3.5' />
+                                    <div
+                                      className='h-3.5 w-3.5 flex-shrink-0 rounded'
+                                      style={{ backgroundColor: wf.color || '#3972F6' }}
+                                    />
                                     <span className='truncate'>{wf.name || 'Untitled Workflow'}</span>
                                   </div>
                                 ))
