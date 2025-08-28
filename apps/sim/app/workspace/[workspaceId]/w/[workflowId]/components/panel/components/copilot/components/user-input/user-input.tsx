@@ -129,7 +129,7 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
     const [isLoadingWorkflows, setIsLoadingWorkflows] = useState(false)
     const [knowledgeBases, setKnowledgeBases] = useState<Array<{ id: string; name: string }>>([])
     const [isLoadingKnowledge, setIsLoadingKnowledge] = useState(false)
-    const [blocksList, setBlocksList] = useState<Array<{ id: string; name: string; icon?: React.ReactNode }>>([])
+    const [blocksList, setBlocksList] = useState<Array<{ id: string; name: string; iconComponent?: any; bgColor?: string }>>([])
     const [isLoadingBlocks, setIsLoadingBlocks] = useState(false)
     const [templatesList, setTemplatesList] = useState<Array<{ id: string; name: string; stars: number }>>([])
     const [isLoadingTemplates, setIsLoadingTemplates] = useState(false)
@@ -262,14 +262,27 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
         setIsLoadingBlocks(true)
         const { getAllBlocks } = await import('@/blocks')
         const all = getAllBlocks()
-        const mapped = all
-          .filter((b: any) => b.type !== 'starter' && !b.hideFromToolbar)
+        const regularBlocks = all
+          .filter((b: any) => b.type !== 'starter' && !b.hideFromToolbar && b.category === 'blocks')
           .map((b: any) => ({
             id: b.type,
             name: b.name || b.type,
-            icon: typeof b.icon === 'function' ? b.icon({ className: 'h-4 w-4' }) : b.icon,
+            iconComponent: b.icon,
+            bgColor: b.bgColor,
           }))
           .sort((a: any, b: any) => a.name.localeCompare(b.name))
+
+        const toolBlocks = all
+          .filter((b: any) => b.type !== 'starter' && !b.hideFromToolbar && b.category === 'tools')
+          .map((b: any) => ({
+            id: b.type,
+            name: b.name || b.type,
+            iconComponent: b.icon,
+            bgColor: b.bgColor,
+          }))
+          .sort((a: any, b: any) => a.name.localeCompare(b.name))
+
+        const mapped = [...regularBlocks, ...toolBlocks]
         setBlocksList(mapped)
       } catch {}
       finally {
@@ -1561,8 +1574,13 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
                                       setSubmenuQueryStart(null)
                                     }}
                                   >
-                                    <div className='flex h-4 w-4 items-center justify-center'>
-                                      {blk.icon}
+                                    <div
+                                      className='relative flex h-4 w-4 items-center justify-center rounded-[3px]'
+                                      style={{ backgroundColor: blk.bgColor || '#6B7280' }}
+                                    >
+                                      {blk.iconComponent && (
+                                        <blk.iconComponent className='text-white !h-3 !w-3' />
+                                      )}
                                     </div>
                                     <span className='truncate'>{blk.name || blk.id}</span>
                                   </div>
