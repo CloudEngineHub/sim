@@ -843,12 +843,21 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
       if (atIndex === -1) return null
       // Ensure '@' starts a token (start or whitespace before)
       if (atIndex > 0 && !/\s/.test(before.charAt(atIndex - 1))) return null
-      // If this '@' is part of an existing pill token, ignore
+      // If this '@' falls anywhere inside an existing mention token, ignore.
+      // This also covers labels that themselves contain '@' characters.
       if (selectedContexts.length > 0) {
-        for (const c of selectedContexts) {
-          const lbl = c.label || ''
-          if (lbl && text.startsWith(`@${lbl}`, atIndex)) {
-            return null
+        const labels = selectedContexts.map((c) => c.label).filter(Boolean) as string[]
+        for (const label of labels) {
+          const token = `@${label}`
+          let fromIndex = 0
+          while (fromIndex <= text.length) {
+            const idx = text.indexOf(token, fromIndex)
+            if (idx === -1) break
+            const end = idx + token.length
+            if (atIndex >= idx && atIndex < end) {
+              return null
+            }
+            fromIndex = end
           }
         }
       }
