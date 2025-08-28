@@ -38,6 +38,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui'
+import { LibraryBig, Bot, Workflow, Blocks, Shapes } from 'lucide-react'
 import { Input } from '@/components/ui'
 import { useSession } from '@/lib/auth-client'
 import { createLogger } from '@/lib/logs/console/logger'
@@ -114,9 +115,12 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
     const submenuRef = useRef<HTMLDivElement>(null)
     const menuListRef = useRef<HTMLDivElement>(null)
     const [mentionActiveIndex, setMentionActiveIndex] = useState(0)
-    const mentionOptions = ['Past Chat', 'Workflow', 'Blocks', 'Knowledge', 'Templates']
+    const mentionOptions = ['Chats', 'Workflows', 'Blocks', 'Knowledge', 'Templates']
     const [openSubmenuFor, setOpenSubmenuFor] = useState<string | null>(null)
     const [submenuActiveIndex, setSubmenuActiveIndex] = useState(0)
+    const isSubmenu = (
+      v: 'Chats' | 'Workflows' | 'Knowledge' | 'Blocks' | 'Templates'
+    ) => openSubmenuFor === v
     const [pastChats, setPastChats] = useState<Array<{ id: string; title: string | null; workflowId: string | null; updatedAt?: string }>>([])
     const [isLoadingPastChats, setIsLoadingPastChats] = useState(false)
     // Removed explicit submenu query inputs; we derive query from the text typed after '@'
@@ -508,7 +512,7 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
           : []
         const isAggregate = !openSubmenuFor && mainQ.length > 0 && filteredMain.length === 0
 
-        if (openSubmenuFor === 'Past Chat' && pastChats.length > 0) {
+        if (openSubmenuFor === 'Chats' && pastChats.length > 0) {
           const q = getSubmenuQuery().toLowerCase()
           const filtered = pastChats.filter((c) => (c.title || 'Untitled Chat').toLowerCase().includes(q))
           setSubmenuActiveIndex((prev) => {
@@ -520,7 +524,7 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
             requestAnimationFrame(() => scrollActiveItemIntoView(next))
             return next
           })
-        } else if (openSubmenuFor === 'Workflow' && workflows.length > 0) {
+        } else if (openSubmenuFor === 'Workflows' && workflows.length > 0) {
           const q = getSubmenuQuery().toLowerCase()
           const filtered = workflows.filter((w) => (w.name || 'Untitled Workflow').toLowerCase().includes(q))
           setSubmenuActiveIndex((prev) => {
@@ -571,8 +575,8 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
         } else if (isAggregate) {
           const q = mainQ
           const aggregated = [
-            ...pastChats.filter((c) => (c.title || 'Untitled Chat').toLowerCase().includes(q)).map((c) => ({ type: 'Past Chat' as const, value: c })),
-            ...workflows.filter((w) => (w.name || 'Untitled Workflow').toLowerCase().includes(q)).map((w) => ({ type: 'Workflow' as const, value: w })),
+            ...pastChats.filter((c) => (c.title || 'Untitled Chat').toLowerCase().includes(q)).map((c) => ({ type: 'Chats' as const, value: c })),
+            ...workflows.filter((w) => (w.name || 'Untitled Workflow').toLowerCase().includes(q)).map((w) => ({ type: 'Workflows' as const, value: w })),
             ...knowledgeBases.filter((k) => (k.name || 'Untitled').toLowerCase().includes(q)).map((k) => ({ type: 'Knowledge' as const, value: k })),
             ...blocksList.filter((b) => (b.name || b.id).toLowerCase().includes(q)).map((b) => ({ type: 'Blocks' as const, value: b })),
             ...templatesList.filter((t) => (t.name || 'Untitled Template').toLowerCase().includes(q)).map((t) => ({ type: 'Templates' as const, value: t })),
@@ -606,15 +610,15 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
         const mainQ = (active?.query || '').toLowerCase()
         const filteredMain = mentionOptions.filter((o) => o.toLowerCase().includes(mainQ))
         const selected = filteredMain[mentionActiveIndex]
-        if (selected === 'Past Chat') {
+        if (selected === 'Chats') {
           resetActiveMentionQuery()
-          setOpenSubmenuFor('Past Chat')
+          setOpenSubmenuFor('Chats')
           setSubmenuActiveIndex(0)
           setSubmenuQueryStart(getCaretPos())
           void ensurePastChatsLoaded()
-        } else if (selected === 'Workflow') {
+        } else if (selected === 'Workflows') {
           resetActiveMentionQuery()
-          setOpenSubmenuFor('Workflow')
+          setOpenSubmenuFor('Workflows')
           setSubmenuActiveIndex(0)
           setSubmenuQueryStart(getCaretPos())
           void ensureWorkflowsLoaded()
@@ -739,13 +743,13 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
           const filteredMain = mentionOptions.filter((o) => o.toLowerCase().includes(mainQ))
           const isAggregate = !openSubmenuFor && mainQ.length > 0 && filteredMain.length === 0
           const selected = filteredMain[mentionActiveIndex]
-          if (!openSubmenuFor && selected === 'Past Chat') {
+          if (!openSubmenuFor && selected === 'Chats') {
             resetActiveMentionQuery()
-            setOpenSubmenuFor('Past Chat')
+            setOpenSubmenuFor('Chats')
             setSubmenuActiveIndex(0)
             setSubmenuQueryStart(getCaretPos())
             void ensurePastChatsLoaded()
-          } else if (openSubmenuFor === 'Past Chat') {
+          } else if (openSubmenuFor === 'Chats') {
             const q = getSubmenuQuery().toLowerCase()
             const filtered = pastChats.filter((c) => (c.title || 'Untitled Chat').toLowerCase().includes(q))
             if (filtered.length > 0) {
@@ -753,13 +757,13 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
               insertPastChatMention(chosen)
               setSubmenuQueryStart(null)
             }
-          } else if (!openSubmenuFor && selected === 'Workflow') {
+          } else if (!openSubmenuFor && selected === 'Workflows') {
             resetActiveMentionQuery()
-            setOpenSubmenuFor('Workflow')
+            setOpenSubmenuFor('Workflows')
             setSubmenuActiveIndex(0)
             setSubmenuQueryStart(getCaretPos())
             void ensureWorkflowsLoaded()
-          } else if (openSubmenuFor === 'Workflow') {
+          } else if (openSubmenuFor === 'Workflows') {
             const q = getSubmenuQuery().toLowerCase()
             const filtered = workflows.filter((w) => (w.name || 'Untitled Workflow').toLowerCase().includes(q))
             if (filtered.length > 0) {
@@ -812,8 +816,8 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
           } else if (isAggregate) {
             const q = mainQ
             const aggregated = [
-              ...pastChats.filter((c) => (c.title || 'Untitled Chat').toLowerCase().includes(q)).map((c) => ({ type: 'Past Chat' as const, value: c })),
-              ...workflows.filter((w) => (w.name || 'Untitled Workflow').toLowerCase().includes(q)).map((w) => ({ type: 'Workflow' as const, value: w })),
+              ...pastChats.filter((c) => (c.title || 'Untitled Chat').toLowerCase().includes(q)).map((c) => ({ type: 'Chats' as const, value: c })),
+              ...workflows.filter((w) => (w.name || 'Untitled Workflow').toLowerCase().includes(q)).map((w) => ({ type: 'Workflows' as const, value: w })),
               ...knowledgeBases.filter((k) => (k.name || 'Untitled').toLowerCase().includes(q)).map((k) => ({ type: 'Knowledge' as const, value: k })),
               ...blocksList.filter((b) => (b.name || b.id).toLowerCase().includes(q)).map((b) => ({ type: 'Blocks' as const, value: b })),
               ...templatesList.filter((t) => (t.name || 'Untitled Template').toLowerCase().includes(q)).map((t) => ({ type: 'Templates' as const, value: t })),
@@ -821,8 +825,8 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
             const idx = Math.max(0, Math.min(submenuActiveIndex, aggregated.length - 1))
             const chosen = aggregated[idx]
             if (chosen) {
-              if (chosen.type === 'Past Chat') insertPastChatMention(chosen.value)
-              else if (chosen.type === 'Workflow') insertWorkflowMention(chosen.value)
+              if (chosen.type === 'Chats') insertPastChatMention(chosen.value)
+              else if (chosen.type === 'Workflows') insertWorkflowMention(chosen.value)
               else if (chosen.type === 'Knowledge') insertKnowledgeMention(chosen.value)
               else if (chosen.type === 'Blocks') insertBlockMention(chosen.value)
               else if (chosen.type === 'Templates') insertTemplateMention(chosen.value)
@@ -1411,9 +1415,9 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
                   {openSubmenuFor ? (
                     <>
                       <div className='px-2 py-1.5 text-muted-foreground text-xs'>
-                        {openSubmenuFor === 'Past Chat'
-                          ? 'Past Chats'
-                          : openSubmenuFor === 'Workflow'
+                        {openSubmenuFor === 'Chats'
+                          ? 'Chats'
+                          : openSubmenuFor === 'Workflows'
                           ? 'Workflows'
                           : openSubmenuFor === 'Knowledge'
                           ? 'Knowledge Bases'
@@ -1422,7 +1426,7 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
                           : 'Templates'}
                       </div>
                       <div ref={menuListRef} className='flex-1 overflow-auto overscroll-contain'>
-                        {openSubmenuFor === 'Past Chat' && (
+                        {isSubmenu('Chats') && (
                           <>
                             {isLoadingPastChats ? (
                               <div className='px-2 py-2 text-muted-foreground text-sm'>Loading...</div>
@@ -1447,18 +1451,16 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
                                       setSubmenuQueryStart(null)
                                     }}
                                   >
-                                    {chat.workflowId && chat.workflowId === workflowId ? (
-                                      <Package className='h-3.5 w-3.5 text-muted-foreground' />
-                                    ) : (
-                                      <div className='h-3.5 w-3.5' />
-                                    )}
+                                    <div className='flex h-4 w-4 flex-shrink-0 items-center justify-center'>
+                                      <Bot className='h-3.5 w-3.5 text-muted-foreground' strokeWidth={1.5} />
+                                    </div>
                                     <span className='truncate'>{chat.title || 'Untitled Chat'}</span>
                                   </div>
                                 ))
                             )}
                           </>
                         )}
-                        {openSubmenuFor === 'Workflow' && (
+                        {isSubmenu('Workflows') && (
                           <>
                             {isLoadingWorkflows ? (
                               <div className='px-2 py-2 text-muted-foreground text-sm'>Loading...</div>
@@ -1493,7 +1495,7 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
                             )}
                           </>
                         )}
-                        {openSubmenuFor === 'Knowledge' && (
+                        {isSubmenu('Knowledge') && (
                           <>
                             {isLoadingKnowledge ? (
                               <div className='px-2 py-2 text-muted-foreground text-sm'>Loading...</div>
@@ -1518,14 +1520,14 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
                                       setSubmenuQueryStart(null)
                                     }}
                                   >
-                                    <div className='h-3.5 w-3.5' />
+                                    <LibraryBig className='h-3.5 w-3.5 text-muted-foreground' />
                                     <span className='truncate'>{kb.name || 'Untitled'}</span>
                                   </div>
                                 ))
                             )}
                           </>
                         )}
-                        {openSubmenuFor === 'Blocks' && (
+                        {isSubmenu('Blocks') && (
                           <>
                             {isLoadingBlocks ? (
                               <div className='px-2 py-2 text-muted-foreground text-sm'>Loading...</div>
@@ -1559,7 +1561,7 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
                             )}
                           </>
                         )}
-                        {openSubmenuFor === 'Templates' && (
+                        {isSubmenu('Templates') && (
                           <>
                             {isLoadingTemplates ? (
                               <div className='px-2 py-2 text-muted-foreground text-sm'>Loading...</div>
@@ -1606,10 +1608,10 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
                           const aggregated = [
                             ...pastChats
                               .filter((c) => (c.title || 'Untitled Chat').toLowerCase().includes(q))
-                              .map((c) => ({ type: 'Past Chat' as const, id: c.id, label: c.title || 'Untitled Chat', onClick: () => insertPastChatMention(c) })),
+                              .map((c) => ({ type: 'Chats' as const, id: c.id, label: c.title || 'Untitled Chat', onClick: () => insertPastChatMention(c) })),
                             ...workflows
                               .filter((w) => (w.name || 'Untitled Workflow').toLowerCase().includes(q))
-                              .map((w) => ({ type: 'Workflow' as const, id: w.id, label: w.name || 'Untitled Workflow', onClick: () => insertWorkflowMention(w) })),
+                              .map((w) => ({ type: 'Workflows' as const, id: w.id, label: w.name || 'Untitled Workflow', onClick: () => insertWorkflowMention(w) })),
                             ...knowledgeBases
                               .filter((k) => (k.name || 'Untitled').toLowerCase().includes(q))
                               .map((k) => ({ type: 'Knowledge' as const, id: k.id, label: k.name || 'Untitled', onClick: () => insertKnowledgeMention(k) })),
@@ -1661,15 +1663,15 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
                                 aria-selected={mentionActiveIndex === idx}
                                 onMouseEnter={() => setMentionActiveIndex(idx)}
                                 onClick={() => {
-                                  if (label === 'Past Chat') {
+                                  if (label === 'Chats') {
                                     resetActiveMentionQuery()
-                                    setOpenSubmenuFor('Past Chat')
+                                    setOpenSubmenuFor('Chats')
                                     setSubmenuActiveIndex(0)
                                     setSubmenuQueryStart(getCaretPos())
                                     void ensurePastChatsLoaded()
-                                  } else if (label === 'Workflow') {
+                                  } else if (label === 'Workflows') {
                                     resetActiveMentionQuery()
-                                    setOpenSubmenuFor('Workflow')
+                                    setOpenSubmenuFor('Workflows')
                                     setSubmenuActiveIndex(0)
                                     setSubmenuQueryStart(getCaretPos())
                                     void ensureWorkflowsLoaded()
@@ -1694,7 +1696,22 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
                                   }
                                 }}
                               >
-                                <span>{label}</span>
+                                <div className='flex items-center gap-2'>
+                                  {label === 'Chats' ? (
+                                    <Bot className='h-3.5 w-3.5 text-muted-foreground' />
+                                  ) : label === 'Workflows' ? (
+                                    <Workflow className='h-3.5 w-3.5 text-muted-foreground' />
+                                  ) : label === 'Blocks' ? (
+                                    <Blocks className='h-3.5 w-3.5 text-muted-foreground' />
+                                  ) : label === 'Knowledge' ? (
+                                    <LibraryBig className='h-3.5 w-3.5 text-muted-foreground' />
+                                  ) : label === 'Templates' ? (
+                                    <Shapes className='h-3.5 w-3.5 text-muted-foreground' />
+                                  ) : (
+                                    <div className='h-3.5 w-3.5' />
+                                  )}
+                                  <span>{label}</span>
+                                </div>
                                 <ChevronRight className='h-3.5 w-3.5 text-muted-foreground' />
                               </div>
                             ))}
