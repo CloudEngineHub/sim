@@ -24,6 +24,7 @@ import {
   Paperclip,
   X,
   Zap,
+  AtSign,
 } from 'lucide-react'
 import {
   Button,
@@ -1303,6 +1304,22 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
       }
     }
 
+    const handleOpenMentionMenuWithAt = () => {
+      if (disabled || isLoading) return
+      const textarea = textareaRef.current
+      if (!textarea) return
+      textarea.focus()
+      const pos = textarea.selectionStart ?? message.length
+      const needsSpaceBefore = pos > 0 && !/\s/.test(message.charAt(pos - 1))
+      insertAtCursor(needsSpaceBefore ? ' @' : '@')
+      // Open the menu at top level
+      setShowMentionMenu(true)
+      setOpenSubmenuFor(null)
+      setMentionActiveIndex(0)
+      setSubmenuActiveIndex(0)
+      requestAnimationFrame(() => scrollActiveItemIntoView(0))
+    }
+
     return (
       <div className={cn('relative flex-none pb-4', className)}>
         <div
@@ -1927,6 +1944,16 @@ const UserInput = forwardRef<UserInputRef, UserInputProps>(
                   </DropdownMenuContent>
                 </DropdownMenu>
               }
+              <Button
+                variant='ghost'
+                size='icon'
+                onClick={handleOpenMentionMenuWithAt}
+                disabled={disabled || isLoading}
+                className='h-4 w-4 text-muted-foreground hover:text-foreground'
+                title='Insert @'
+              >
+                <AtSign className='h-1.5 w-1.5' strokeWidth={1.25} />
+              </Button>
             </div>
 
             {/* Right side: Attach Button + Send Button */}
